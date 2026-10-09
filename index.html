@@ -1,0 +1,61 @@
+<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>汽車駕照模擬考</title><style>body{margin:0;background:#f5f7fb;color:#202c40;font:16px system-ui,"Noto Sans TC",sans-serif}.wrap{max-width:760px;margin:auto;padding:22px 15px}header,.card{background:white;border:1px solid #e2e7ef;border-radius:14px;padding:20px;margin-bottom:15px}header h1{margin:0 0 10px}button{font:inherit;padding:11px 16px;border:1px solid #cad2df;border-radius:9px;background:white;cursor:pointer}button.main{color:white;background:#254b7b}button:disabled{opacity:.45}.choice{display:block;width:100%;text-align:left;margin:9px 0;line-height:1.7}.choice.selected{background:#dbeafe;border-color:#4068a2}.muted{color:#66748a}.hide{display:none}.score{font-size:35px;font-weight:800}h3{line-height:1.7}</style><main class="wrap"><header><h1>汽車筆試模擬考</h1><div class="muted">題庫版本：115.5.29｜每題 2 分｜答題時隱藏正解</div><p id="status">試行版：完整 PDF 題庫尚待上傳。</p><button class="main" onclick="start()">開始測驗</button> <button onclick="showMistakes()">練習錯題</button></header><div id="questions"></div><div class="card hide" id="submit"><b id="progress"></b><p><button class="main" onclick="finish()">正式交卷並計分</button></p></div><div id="result"></div></main><script>
+const SEED=[
+[4,3,"進入國道施工路段，何者最能預防事故？","在縮減車道處加速超車","開啟輔助系統後滑手機","提早變換車道、保持安全距離並專注"],
+[5,1,"配備 Level 2 ADAS 的新車行駛國道，何者符合安全規範？","系統對靜止工程車辨識有限，駕駛應主動介入","系統會跟車就可以休息","大雨大霧交給電腦更安全"],
+[6,2,"關於變換車道，何者錯誤？","讓直行車先行，注意安全距離","雙白實線可雙邊變換車道","打方向燈，確認後視鏡及死角"],
+[7,3,"於外側車道右轉，應於路口幾公尺前顯示方向燈？","20 公尺","50 公尺","30 公尺"],
+[8,1,"變換車道未依規定全程顯示方向燈，何者正確？","一般道路和高速公路均屬違規","僅高速公路違規","後方沒有車就不違規"],
+[10,3,"車流中頻繁變換車道超車，何者正確？","屬合理駕駛","不影響他人即可","不得驟然變換車道迫使他車讓道"],
+[11,2,"高速公路以密集鳴喇叭迫使前車讓道，處多少罰鍰？","不違規","3,000～6,000 元","沒有事故不處罰"],
+[12,3,"ACC 和 LKA 等駕駛輔助系統，何者正確？","開啟後可以閉眼","能完全辨識靜止障礙物","僅輔助，駕駛人應主動監控"],
+[14,2,"警察指揮與交通燈號不一致時，應如何行駛？","依交通燈號","依警察指揮","跟著前車"],
+[15,3,"酒駕吊銷駕照後重新考照，車輛應裝何設備？","行車紀錄器","車用滅火器","酒精鎖"],
+[16,2,"重新考照後使用酒精鎖車輛，強制使用期間？","半年","1 年","3 年"],
+[18,1,"駕駛酒精濃度達規定標準，18 至未滿 70 歲的同車乘客無特殊原因會受罰嗎？","應受罰","沒有處罰制度","只要沒喝酒就不受罰"],
+[20,2,"汽車駕駛人酒後駕車初犯，酒測超過標準，何者正確？","罰 1.5 萬～9 萬元","罰 3 萬～12 萬元並吊扣駕照","僅警告"],
+[22,3,"初次拒絕酒測，罰鍰金額？","依酒測濃度決定","9 萬元","18 萬元"],
+[26,2,"酒駕同車乘客連坐處罰，下列哪種情況免罰？","不知道駕駛人飲酒","未滿 18 歲或年滿 70 歲","與駕駛人沒有親屬關係"],
+[30,3,"酒駕防制教育訓練的總時數？","10 小時","12 小時","15 小時"],
+[33,2,"幾年內第二次酒駕，依車種規定的最高額罰鍰處罰？","5 年","10 年","15 年"],
+[40,2,"行車中吸菸影響他人安全，罰鍰？","不處罰","1,200 元","只違反環保法"],
+[42,3,"拒絕酒精濃度測試，罰多少元？","6 萬元","9 萬元","18 萬元"],
+[43,2,"紅色實線禁止臨時停車時間原則為何？","7:00～20:00","全天 24 小時","只有夜間"],
+[45,3,"汽車下長坡，何種方式正確？","盡量用腳煞車","不使用煞車讓車滑行","低速檔引擎煞車避免腳煞車過熱"],
+[49,2,"黃實線禁止停車的路段，可否臨時停車？","不可以","可以","可長時間停車"],
+[50,1,"在彎道、狹路、坡路等路段，因讓車或起駛必要可倒車嗎？","可以","不可以","必須後方有人指揮"],
+[51,1,"將自己的駕照借給別人駕車，處罰為何？","吊扣駕照","吊銷駕照","吊扣車牌"],
+[52,3,"一年內違規記點每達 12 點，除講習外處分？","吊銷駕照","罰鍰","吊扣駕照"],
+[54,2,"彎道、狹橋、隧道、平交道等路段可迴車嗎？","可以","不可以","沒有規定"],
+[56,2,"開車時手持手機進行通話、數據通訊，何者正確？","急事可以","禁止","只要不吵到別人即可"],
+[57,3,"汽車載人規定，何者正確？","車廂外可載人","低速可以車外載人","車廂外不得載人"],
+[61,2,"行車時對於視線範圍內顯示設備，何者正確？","娛樂影音靜音就可使用","關閉娛樂設備；導航等輔助畫面可使用","所有顯示設備均不得使用"],
+[66,3,"行車時稍有睡意，該怎麼辦？","提神並減速","靠提神藥物照常開車","在適當地點停車休息後再開"],
+[67,2,"後方有消防車鳴笛駛近，何者正確？","跟著消防車通過壅塞路段","靠右讓路，通過後正常行駛","消防車過後立即加速跟上"],
+[69,2,"哪一種人不得參加汽車駕照考驗？","戒除酒癮並合格者","酒精或麻醉藥品成癮者","酒駕禁考期已滿者"],
+[71,3,"超過最高速限 40 公里以上，罰鍰？","1,200～2,400 元","2,400～6,000 元","6,000～36,000 元"],
+[73,1,"汽車駕駛人行車時手持手機通話，罰多少元？","3,000 元","2,000 元","1,000 元"],
+[84,3,"酒後駕車的視覺隧道效應會導致什麼？","視野不變","視野變廣","視野變窄"],
+[85,1,"汽車駕駛人吐氣所含酒精濃度不得達每公升多少毫克？","0.15","0.25","0.55"],
+[87,2,"將六歲以下兒童單獨留置車內，何種處分？","僅罰鍰","罰鍰及四小時道安講習","罰鍰及違規記點"],
+[89,1,"超過最高速限多少公里以上，處 6,000～36,000 元罰鍰？","40 公里","50 公里","60 公里"],
+[91,3,"汽車上坡使用二檔，下坡應使用？","四檔","三檔","二檔"],
+[93,1,"小型車安全帶使用規定，何者正確？","駕駛人及前後座乘客均須繫妥","起駛後才打方向燈","兒童須坐前座"],
+[94,1,"禁止停車路段原則禁止時段？","7:00～20:00","19:00～8:00","24 小時"],
+[95,3,"禁止臨時停車路段原則禁止時段？","7:00～20:00","19:00～8:00","24 小時"],
+[96,3,"禁止臨時停車路段有何限制？","只能停車不能臨停","不得停車但可以臨停","停車與臨停均禁止"],
+[97,2,"禁止停車路段有何限制？","禁止臨停但可以停車","禁止停車但可臨停","停車與臨停都不行"],
+[98,3,"可停車路段沒有停車格時，可否併排停車？","可以","可任意併排","不可以"],
+[99,1,"設禁止迴車或禁止左轉等標誌路段，可否迴車？","不得迴車","可以倒車","沒車時可以迴車"],
+[100,3,"拆除消音器造成噪音且一年內再犯，處何種處分？","吊銷駕照","吊扣駕照一個月","吊扣駕照六個月"],
+[141,1,"劃分雙向車道且不得跨越及迴轉的黃色雙實線叫什麼？","分向限制線","路面邊線","禁止變換車道線"]
+];
+let pool=SEED,active=[],answers={},done=false;
+function mix(a){let v=[...a];for(let i=v.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[v[i],v[j]]=[v[j],v[i]]}return v}
+function note(t){let s=t[2];return /酒|酒測|酒精|酒駕/.test(s)?'重點整理：酒駕相關的年限、金額、吊扣與吊銷應分開記憶。':/停車|臨停/.test(s)?'分清楚禁止停車與禁止臨時停車，並記住黃線和紅線的差別。':/方向燈|車道|超車/.test(s)?'變換車道應保持安全距離、顯示方向燈並確認死角。':'重讀題目的限制條件，特別注意「不得」「應」及數字。'}
+function save(){localStorage.setItem('drivingWrong',JSON.stringify([...new Set([...(JSON.parse(localStorage.getItem('drivingWrong')||'[]')),...active.filter((q,i)=>answers[i]!==q[1]).map(q=>q[0])])]));}
+function start(mistakes=false){let wrong=JSON.parse(localStorage.getItem('drivingWrong')||'[]');let src=mistakes?SEED.filter(q=>wrong.includes(q[0])):SEED;active=mix(src).slice(0,Math.min(50,src.length));answers={};done=false;render()}
+function showMistakes(){start(true)}
+function render(){document.getElementById('status').textContent='目前可作答 '+SEED.length+' 題（完整 PDF 尚待匯入）；此次 '+active.length+' 題，每題 2 分。';document.getElementById('result').innerHTML='';let o=document.getElementById('questions');o.innerHTML=active.map((q,i)=>'<section class="card"><div class="muted">第 '+(i+1)+' / '+active.length+' 題</div><h3>'+q[2]+'</h3>'+q.slice(3).map((x,j)=>'<button class="choice" data-i="'+i+'" data-v="'+(j+1)+'">'+(j+1)+'．'+x+'</button>').join('')+'</section>').join('');o.querySelectorAll('.choice').forEach(b=>b.onclick=()=>{if(done)return;answers[+b.dataset.i]=+b.dataset.v;document.querySelectorAll('[data-i="'+b.dataset.i+'"]').forEach(x=>x.classList.toggle('selected',x===b));progress()});document.getElementById('submit').classList.toggle('hide',!active.length);progress()}
+function progress(){let n=Object.keys(answers).length;document.getElementById('progress').textContent='已作答 '+n+'／'+active.length+' 題'}
+function finish(){if(Object.keys(answers).length!==active.length){alert('請先完成所有題目');return}done=true;let wrong=active.map((q,i)=>({q,i})).filter(x=>answers[x.i]!==x.q[1]);save();let score=(active.length-wrong.length)*2;document.getElementById('questions').innerHTML='';document.getElementById('submit').classList.add('hide');document.getElementById('result').innerHTML='<section class="card"><h2>測驗結果</h2><div class="score">'+score+' / '+(active.length*2)+'</div><p>答對 '+(active.length-wrong.length)+' 題，答錯 '+wrong.length+' 題</p><button class="main" onclick="start()">重新隨機測驗</button></section>'+wrong.map(({q,i})=>'<section class="card"><h3>原題號 '+q[0]+'｜'+q[2]+'</h3><p>你的選擇：'+q[2+answers[i]]+'</p><p>正確答案：'+q[2+q[1]]+'</p><p><b>記憶重點：</b>'+note(q)+'</p></section>').join('');window.scrollTo(0,0)}
+</script></html>
