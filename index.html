@@ -13,7 +13,7 @@ button.primary{background:#244a7a;color:white;border-color:#244a7a}
 button:disabled{opacity:.43;cursor:not-allowed}
 .actions{display:flex;gap:9px;flex-wrap:wrap}.muted{color:#65748a}.small{font-size:13px}
 .chips{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0}.chip{background:#edf2f9;border-radius:18px;padding:7px 11px}
-.question-img{display:block;width:100%;height:auto;border:1px solid #edf0f5;border-radius:8px}
+.question-img{display:block;width:auto;max-width:100%;height:auto;max-height:420px;object-fit:contain;border:1px solid #e5ebf3;border-radius:10px;background:white;margin:10px auto;cursor:zoom-in}.zoom-cover{position:fixed;inset:0;background:rgba(10,18,28,.9);z-index:100;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px;gap:12px}.zoom-cover.open{display:flex}.zoom-cover img{object-fit:contain;max-width:95vw;max-height:80vh}.zoom-cover button{background:white}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stats>div{border-radius:10px;padding:12px;background:#edf3fa;text-align:center}.count{font-size:24px;font-weight:750}.tag{border-radius:50px;background:#edf3fa;padding:4px 10px;display:inline-block;font-size:13px}.mistake-card{border-left:4px solid #b65747}.memory{background:#f0f5ff;border-radius:10px;padding:12px;line-height:1.7}.small-btn{font-size:14px}@media(max-width:560px){.stats{grid-template-columns:repeat(3,1fr)}.stats>div{padding:8px}.count{font-size:19px}}
 .option{display:block;text-align:left;width:100%;margin:7px 0;color:#1c426f}
 .option.selected{background:#e2efff;border:2px solid #326bb4}
 .nav{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -26,8 +26,8 @@ button:disabled{opacity:.43;cursor:not-allowed}
 <h1>汽車駕照筆試模擬考</h1>
 <div class="chips"><span class="chip">文字題庫</span><span class="chip">隨機 50 題</span><span class="chip">每題 2 分</span><span class="chip">共 100 分</span></div>
 <p class="muted">題庫：115.5.29｜每頁 10 題。全部交卷後才公布答案。</p>
-<div class="actions"><button class="primary" id="newExam">開始新的 50 題模擬考</button><button id="wrongExam">錯題重練</button><button id="showHistory">歷次成績</button></div>
-<p id="status" aria-live="polite" class="small muted">網站已準備完成。點選開始測驗即可。</p>
+<div class="actions"><button class="primary" id="newExam">開始新的 50 題模擬考</button><button id="wrongExam">錯題重練</button><button id="showHistory">歷次成績</button><button id="mistakeLibrary">錯題庫・常錯分析</button></div>
+<div id="homeStats" class="stats" style="margin-top:16px"></div><p id="status" aria-live="polite" class="small muted">網站已準備完成。點選開始測驗即可。</p>
 </header>
 <section id="exam" class="hide">
 <div class="card"><div class="nav"><b id="progressText"></b><b id="pageText"></b></div><div class="progress" style="margin-top:12px"><div id="progressFill"></div></div></div>
@@ -35,99 +35,141 @@ button:disabled{opacity:.43;cursor:not-allowed}
 <div class="card nav"><button id="previous">上一頁</button><button id="next">下一頁</button><button id="submit" class="primary">交卷並計分</button></div>
 </section>
 <section id="results" class="hide"></section>
-</main>
+</main><div class="zoom-cover" id="zoomCover" role="dialog" aria-label="放大交通圖示"><button id="zoomClose">關閉圖片</button><img id="zoomImage" alt="完整放大的交通圖示"></div>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
-let bank=null,round=[],chosen={},page=0,epoch=0;
-const storeRead=k=>{try{return JSON.parse(localStorage.getItem(k)||"[]")}catch{return []}};
-const storeWrite=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
-const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-function shuffled(input){let a=input.slice();for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a}
-function setStatus(t,bad=false){$("status").textContent=t;$("status").className="small "+(bad?"error":"muted")}
+let bank=null,round=[],chosen={},page=0;
+const KEY="driving-mistake-stats-v2",HISTORY="driving-score-history",OLD_WRONG="driving-wrong-ids";
+function read(k,fallback){try{const x=JSON.parse(localStorage.getItem(k));return x??fallback}catch{return fallback}}
+function write(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){$("status").textContent="提醒：Safari 無法儲存成績。請檢查是否使用私密瀏覽模式。"}}
+function esc(x){return String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function shuffled(a){let s=a.slice();for(let i=s.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[s[i],s[j]]=[s[j],s[i]]}return s}
+function say(t,error=false){$("status").textContent=t;$("status").className="small "+(error?"error":"muted")}
+const subjects=[
+["交通標誌與標線",/標誌|標線|圖示|禁制|警告|指示|分向|紅線|黃線|燈號/],
+["酒駕及法律處罰",/酒駕|酒精|酒測|罰鍰|吊扣|吊銷|累犯|違規記點|講習/],
+["行人路權及路口",/行人|路口|路權|斑馬|枕木紋|圓環|穿越道/],
+["停車及臨時停車",/停車|臨時停車|併排/],
+["高速公路及車道",/高速|快速公路|匝道|車道|超車|變換車道/],
+["車輛機件及故障",/故障|輪胎|引擎|機油|電瓶|水溫|煞車|儀表板/],
+["安全駕駛及事故",/事故|肇事|事故現場|安全距離|疲勞|注意|應變|避讓|兒童/]
+];
+function category(q){const t=[q.q,...q.o].join("");for(const [label,re] of subjects)if(re.test(t))return label;return "其他駕駛規則"}
+function mnemonic(q,wrongChoice){
+ const correct=q.o[q.a-1]||"",incorrect=q.o[(wrongChoice||1)-1]||"",text=q.q+" "+correct;
+ let scene="";
+ if(/酒|酒測|酒精/.test(text))scene="想像酒瓶一碰方向盤就亮起紅燈；把題目中的罰鍰、年限和駕照處分分別貼在紅燈旁，不要混記。";
+ else if(/停車|臨時停車|紅線|黃線/.test(text))scene="想像路邊兩個守門員：紅線舉起紅牌「連臨停都不行」，黃線提醒「停車受限」；再核對題目的時段。";
+ else if(/消防|救護|警備|救險/.test(text))scene="把消防車想成一路發亮的緊急通道：先讓路、不要尾隨搶快。";
+ else if(/行人|穿越道|斑馬|枕木紋/.test(text))scene="想像斑馬站在斑馬線上當裁判：先保護行人，再決定車子怎麼走。";
+ else if(/車道|超車|方向燈|匝道/.test(text))scene="想像變換車道前要做「照鏡子—打燈—看死角」三連拍，先讓直行車再移動。";
+ else if(/標誌|圖示|燈號|標線/.test(text))scene="把圖示畫成一張角色卡：先抓外形、顏色與箭頭，再用一句話替它命名，和另外兩張對照。";
+ else if(/煞車|下坡|輪胎|水溫|電瓶|引擎/.test(text))scene="把儀表板想成車子的健康手環：亮警示先保安全，不要硬撐繼續開。";
+ else if(/疲勞|睡意|手機|輔助系統/.test(text))scene="想像方向盤是雙手才能握住的門票：眼睛離開路面，門票就失效。";
+ else scene="把這題演成三幕小劇場：先說情境，再說該怎麼做，最後想像錯誤選項會造成什麼後果。";
+ let contrast=incorrect&&incorrect!==correct?"你容易混淆的是「"+incorrect.slice(0,55)+"」；請把它和正解的關鍵動作或數字分開記。":"";
+ return {cue:"這題要記住：「"+correct+"」",story:scene,contrast};
+}
+function records(){const x=read(KEY,{});return x&&typeof x==="object"&&!Array.isArray(x)?x:{}}
+function legacyWrong(){return read(OLD_WRONG,[]).map(Number).filter(Number.isFinite)}
+function wrongIds(){const a=records();return [...new Set([...legacyWrong(),...Object.entries(a).filter(([id,row])=>(row.wrong||0)>0).map(([id])=>Number(id))])]}
+function summary(){
+ const hist=read(HISTORY,[]);
+ const rec=records();
+ const freq=Object.values(rec).reduce((n,r)=>n+(Number(r.wrong)||0),0);
+ $("homeStats").innerHTML='<div><div class="count">'+hist.length+'</div><div class="small">已完成測驗</div></div><div><div class="count">'+wrongIds().length+'</div><div class="small">累積錯題</div></div><div><div class="count">'+freq+'</div><div class="small">新版累計答錯次數</div></div>';
+}
 async function loadBank(){
  if(bank)return bank;
- setStatus("正在載入題庫索引…");
- const response=await fetch("./data/quiz-text.json?v=20261009-text",{cache:"no-cache"});
- if(!response.ok)throw Error("題庫索引無法讀取（HTTP "+response.status+"）");
- const data=await response.json();
- if(!Array.isArray(data)||data.length<900||data.some(q=>!Number.isInteger(q.n)||![1,2,3].includes(q.a)))throw Error("題庫資料不完整");
- const ids=new Set(data.map(q=>q.n));
- if(ids.size!==data.length)throw Error("題庫題號重複");
- bank=data;document.querySelector(".chip").textContent=data.length+" 題可測驗";return bank;
+ say("正在讀取 1,090 題題庫...");
+ const r=await fetch("./data/quiz-text.json?v=20261009-rev5",{cache:"no-cache"});
+ if(!r.ok)throw Error("題庫下載失敗 HTTP "+r.status);
+ const a=await r.json();
+ if(!Array.isArray(a)||a.length!==1090||a.some(q=>!q.q||q.o?.length!==3||![1,2,3].includes(q.a)))throw Error("題庫內容不完整");
+ bank=a;document.querySelector(".chip").textContent=a.length+" 題";
+ return bank;
 }
+const figure=q=>q.fig?'<div><button class="small-btn" type="button" onclick="zoom('+q.n+')">放大看完整圖示</button><img class="question-img" alt="原題號 '+q.n+' 的完整交通圖示" loading="lazy" src="./figures-hq/'+q.n+'.png" onerror="this.onerror=null;this.src=\'./figures/'+q.n+'.png\'"></div>':"";
+function zoom(n){$("zoomImage").src="./figures-hq/"+n+".png";$("zoomImage").onerror=()=>{$("zoomImage").onerror=null;$("zoomImage").src="./figures/"+n+".png"};$("zoomCover").classList.add("open")}
+$("zoomClose").onclick=()=>$("zoomCover").classList.remove("open");
+$("zoomCover").addEventListener("click",e=>{if(e.target===$("zoomCover"))$("zoomCover").classList.remove("open")});
 async function newRound(onlyWrong=false){
  try{
-  $("newExam").disabled=true;
-  const all=await loadBank();
-  const wrong=storeRead("driving-wrong-ids");
-  const pool=onlyWrong?all.filter(q=>wrong.includes(q.n)):all;
-  if(!pool.length){setStatus("目前尚無錯題，請先完成一回模擬考。");return}
-  round=shuffled(pool).slice(0,Math.min(50,pool.length));chosen={};page=0;epoch++;
-  $("results").classList.add("hide");$("exam").classList.remove("hide");
-  setStatus("文字題庫已載入。只有圖示題會顯示圖片。");
-  render();$("exam").scrollIntoView({behavior:"auto"});
- }catch(e){setStatus("無法開始測驗："+e.message,true)}
- finally{$("newExam").disabled=false}
+  $("newExam").disabled=true;const all=await loadBank();
+  const ids=new Set(wrongIds());const pool=onlyWrong?all.filter(q=>ids.has(q.n)):all;
+  if(!pool.length){say("目前還沒有錯題，先完成一回模擬考。");return}
+  round=shuffled(pool).slice(0,Math.min(50,pool.length));page=0;chosen={};
+  $("exam").classList.remove("hide");$("results").classList.add("hide");
+  say(onlyWrong?"錯題加強練習進行中":"正式模擬考進行中");draw();$("exam").scrollIntoView();
+ }catch(e){say("載入失敗："+e.message,true)}finally{$("newExam").disabled=false}
 }
-function render(){
- const count=round.filter((q,i)=>chosen[i]).length;
- $("progressText").textContent="已答 "+count+"／"+round.length+" 題";
- $("progressFill").style.width=(count/round.length*100)+"%";
+function draw(){
+ const n=round.filter((q,i)=>chosen[i]).length,start=page*10,part=round.slice(start,start+10);
+ $("progressText").textContent="已答 "+n+"／"+round.length+" 題";$("progressFill").style.width=n/round.length*100+"%";
  $("pageText").textContent="第 "+(page+1)+"／"+Math.ceil(round.length/10)+" 頁";
- $("previous").disabled=(page===0);
- $("next").disabled=(page>=Math.ceil(round.length/10)-1);
- $("submit").disabled=(page!==Math.ceil(round.length/10)-1);
- const start=page*10;const slice=round.slice(start,start+10);
- $("questionList").innerHTML=slice.map((q,j)=>{
-  const i=start+j;
-  return '<article class="card"><h3>第 '+(i+1)+' 題 <span class="muted small">原題號 '+q.n+'</span></h3>'+
-    '<p>'+esc(q.q)+'</p>'+
-    (q.fig?'<img class="question-img" loading="lazy" alt="交通圖示，原題號 '+q.n+'" src="./figures/'+q.n+'.png">':'')+
-    '<div class="choices" id="choices-'+i+'">'+q.o.map((opt,k)=>'<button class="option '+(chosen[i]===k+1?"selected":"")+'" data-i="'+i+'" data-choice="'+(k+1)+'" type="button">（'+(k+1)+'）'+esc(opt)+'</button>').join("")+'</div></article>';
+ $("previous").disabled=page===0;$("next").disabled=page===Math.ceil(round.length/10)-1;
+ $("submit").disabled=page!==Math.ceil(round.length/10)-1;
+ $("questionList").innerHTML=part.map((q,k)=>{
+ const i=start+k;return '<article class="card"><h3>第 '+(i+1)+' 題 <span class="muted small">原題號 '+q.n+'</span></h3><p>'+esc(q.q)+'</p>'+figure(q)+'<div id="choices-'+i+'">'+q.o.map((o,j)=>'<button type="button" class="option '+(chosen[i]===j+1?"selected":"")+'" data-i="'+i+'" data-choice="'+(j+1)+'">（'+(j+1)+'）'+esc(o)+'</button>').join("")+'</div></article>';
  }).join("");
 }
 $("questionList").addEventListener("click",e=>{
- const b=e.target.closest("button[data-choice]");if(!b||b.disabled)return;
+ const b=e.target.closest("button[data-choice]");if(!b)return;
  const i=Number(b.dataset.i),v=Number(b.dataset.choice);chosen[i]=v;
- const region=$("choices-"+i);region.querySelectorAll("button").forEach(opt=>{
-  const selected=Number(opt.dataset.choice)===v;
-  opt.classList.toggle("selected",selected);
-  opt.textContent="（"+opt.dataset.choice+"）"+round[i].o[Number(opt.dataset.choice)-1];
- });
- const count=round.filter((_,i)=>chosen[i]).length;
- $("progressText").textContent="已答 "+count+"／"+round.length+" 題";
- $("progressFill").style.width=count/round.length*100+"%";
+ $("choices-"+i).querySelectorAll("button").forEach(x=>x.classList.toggle("selected",Number(x.dataset.choice)===v));
+ const n=round.filter((q,i)=>chosen[i]).length;
+ $("progressText").textContent="已答 "+n+"／"+round.length+" 題";$("progressFill").style.width=n/round.length*100+"%";
 });
-$("previous").onclick=()=>{page--;epoch++;render();$("exam").scrollIntoView()};
-$("next").onclick=()=>{page++;epoch++;render();$("exam").scrollIntoView()};
-function mnemonic(q){
- const t=q.txt||"";
- if(/酒|酒精|酒駕|酒測/.test(t))return "酒駕：分開比較「罰鍰、吊扣駕照、吊銷駕照、累犯年限」，尤其注意數字。";
- if(/臨時停車|禁止停車|紅色實線|黃色實線/.test(t))return "停車：紅實線禁止臨停；黃實線禁止停車，注意規定時段。";
- if(/方向燈|變換車道|超車/.test(t))return "變換車道：先打燈、確認後照鏡與死角、禮讓直行車。";
- if(/輔助系統|ADAS|ACC/.test(t))return "駕駛輔助不是自動駕駛，駕駛人仍須全程監控。";
- return "記憶方法：圈出題目的動作、數字及「何者錯誤／正確」，比較三個選項的關鍵差異。";
+$("previous").onclick=()=>{page--;draw();$("exam").scrollIntoView()};
+$("next").onclick=()=>{page++;draw();$("exam").scrollIntoView()};
+function explain(q,selected){
+ const m=mnemonic(q,selected);return '<div class="memory"><b>記憶鉤子：</b>'+esc(m.story)+'<p><b>正解關鍵：</b>'+esc(m.cue)+'</p>'+(m.contrast?'<p>'+esc(m.contrast)+'</p>':"")+'</div>';
+}
+function itemCard(q,wrongAnswer,count,includeCount=true){
+ return '<article class="card mistake-card"><h3>原題號 '+q.n+'　'+(includeCount?'<span class="tag">累計答錯 '+count+' 次</span>':"")+'</h3><span class="tag">'+esc(category(q))+'</span><p>'+esc(q.q)+'</p>'+figure(q)+q.o.map((o,i)=>'<p>（'+(i+1)+'）'+esc(o)+'</p>').join("")+
+ '<p><b>最近錯選：</b>'+(wrongAnswer?esc(q.o[wrongAnswer-1]):"舊版未紀錄")+'</p><p class="good"><b>正確答案：</b>（'+q.a+'）'+esc(q.o[q.a-1])+'</p>'+explain(q,wrongAnswer)+'</article>';
 }
 $("submit").onclick=()=>{
  const missing=round.filter((q,i)=>!chosen[i]).length;
- if(missing&&!confirm("還有 "+missing+" 題未作答，確定交卷？"))return;
+ if(missing&&!confirm("尚有 "+missing+" 題未作答，確定交卷並將未作答列為答錯？"))return;
  const mistakes=round.map((q,i)=>({q,i})).filter(({q,i})=>chosen[i]!==q.a);
- const score=(round.length-mistakes.length)*2;
- const saved=new Set(storeRead("driving-wrong-ids"));mistakes.forEach(({q})=>saved.add(q.n));storeWrite("driving-wrong-ids",[...saved]);
- const history=storeRead("driving-score-history");history.push({date:new Date().toLocaleString("zh-TW"),score,max:round.length*2,wrong:mistakes.length});storeWrite("driving-score-history",history);
+ const old=records(),now=new Date().toLocaleString("zh-TW");
+ round.forEach((q,i)=>{const prev=old[q.n]||{seen:0,wrong:0,correct:0};
+   prev.seen=(prev.seen||0)+1;
+   if(chosen[i]===q.a)prev.correct=(prev.correct||0)+1;
+   else {prev.wrong=(prev.wrong||0)+1;prev.lastWrongAnswer=chosen[i]||null;prev.lastWrongAt=now}
+   prev.category=category(q);old[q.n]=prev;
+ });
+ write(KEY,old);
+ const history=read(HISTORY,[]),score=(round.length-mistakes.length)*2;
+ history.push({date:now,score,max:round.length*2,wrong:mistakes.length,answered:round.length,kind:round.length===50?"正式模擬考":"錯題練習"});
+ write(HISTORY,history);
+ const ids=new Set(legacyWrong());mistakes.forEach(({q})=>ids.add(q.n));write(OLD_WRONG,[...ids]);
  $("exam").classList.add("hide");$("results").classList.remove("hide");
- $("results").innerHTML='<div class="card"><h2>測驗成績：'+score+'／'+round.length*2+' 分</h2><p>答對 '+(round.length-mistakes.length)+' 題、答錯 '+mistakes.length+' 題。</p><div class="actions"><button class="primary" id="again">再抽 50 題</button><button id="wrongAgain">重練錯題</button></div></div>'+
- mistakes.map(({q,i})=>'<article class="card review"><h3>第 '+(i+1)+' 題｜原題號 '+q.n+'</h3><img loading="lazy" src="./images/'+q.n+'.png" alt="錯題原始題目"><p><b>你的答案：</b>'+(chosen[i]||"未作答")+'　<b>正確答案：</b>'+q.a+'</p><div class="note"><b>記憶重點：</b>'+esc(mnemonic(q))+'</div></article>').join("");
- $("again").onclick=()=>newRound(false);
- $("wrongAgain").onclick=()=>newRound(true);
+ $("results").innerHTML='<section class="card"><h2>本次成績：'+score+'／'+round.length*2+' 分</h2><p>答對 '+(round.length-mistakes.length)+' 題、答錯 '+mistakes.length+' 題。</p><div class="actions"><button class="primary" id="again">再抽 50 題</button><button id="review">查看累積錯題庫</button></div></section>'+mistakes.map(({q,i})=>itemCard(q,chosen[i],old[q.n].wrong,false)).join("");
+ $("again").onclick=()=>newRound(false);$("review").onclick=showMistakes;summary();window.scrollTo(0,0);
+};
+async function showMistakes(){
+ try{
+ const all=await loadBank();const rec=records(),legacy=new Set(legacyWrong());
+ const mistakes=all.filter(q=>(rec[q.n]?.wrong||0)>0||legacy.has(q.n)).sort((a,b)=>(rec[b.n]?.wrong||0)-(rec[a.n]?.wrong||0)||((rec[b.n]?.seen||0)-(rec[a.n]?.seen||0)));
+ const groups={};for(const q of mistakes){const c=category(q);const r=rec[q.n]||{};const v=groups[c]||(groups[c]={questions:0,wrong:0,seen:0});v.questions++;v.wrong+=(r.wrong||0);v.seen+=(r.seen||0)}
+ const order=Object.entries(groups).sort((a,b)=>b[1].wrong-a[1].wrong||b[1].questions-a[1].questions);
+ $("exam").classList.add("hide");$("results").classList.remove("hide");
+ $("results").innerHTML='<section class="card"><h2>我的錯題庫</h2><p>已完成 '+read(HISTORY,[]).length+' 次測驗｜累積錯題 '+mistakes.length+' 題。錯題依「新版答錯次數」由多至少排列。</p><p class="muted small">舊版只記錄錯題清單，沒有每題錯誤次數；這些舊題標註為「舊紀錄」，不會擅自推算次數。</p><h3>容易出錯的類別</h3>'+ (order.length?order.map(([name,v])=>'<p><b>'+esc(name)+'</b>：'+v.questions+' 道錯題，新版累計答錯 '+v.wrong+' 次'+(v.seen?'（相關題作答 '+v.seen+' 次，錯誤率 '+Math.round(v.wrong/v.seen*100)+'%）':"")+'</p>').join(""):'<p>目前沒有錯題紀錄。</p>')+
+ '<div class="actions"><button id="practice" class="primary">練習這些錯題</button><button id="exportMistakes">匯出錯題紀錄 JSON</button></div></section>'+
+ mistakes.map(q=>itemCard(q,rec[q.n]?.lastWrongAnswer,rec[q.n]?.wrong||0)).join("");
+ $("practice").onclick=()=>newRound(true);
+ $("exportMistakes").onclick=()=>{const out={exportedAt:new Date().toISOString(),history:read(HISTORY,[]),records:rec,legacyWrongIds:[...legacy]};const blob=new Blob([JSON.stringify(out,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="driving-exam-mistakes.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000)};
+ window.scrollTo(0,0);
+ }catch(e){say("錯題庫讀取失敗："+e.message,true)}
+}
+$("newExam").onclick=()=>newRound(false);$("wrongExam").onclick=()=>newRound(true);$("mistakeLibrary").onclick=showMistakes;
+$("showHistory").onclick=()=>{
+ const h=read(HISTORY,[]);$("exam").classList.add("hide");$("results").classList.remove("hide");
+ $("results").innerHTML='<section class="card"><h2>歷次成績｜已完成 '+h.length+' 次</h2>'+(h.length?h.slice().reverse().map((x,i)=>'<p>第 '+(h.length-i)+' 次｜'+esc(x.date)+'　'+x.score+'／'+x.max+' 分，答錯 '+(x.wrong??"未紀錄")+' 題</p>').join(""):'<p>目前尚無紀錄。</p>')+'</section>';
  window.scrollTo(0,0);
 };
-$("newExam").onclick=()=>newRound(false);
-$("wrongExam").onclick=()=>newRound(true);
-$("showHistory").onclick=()=>{
- const entries=storeRead("driving-score-history");
- $("exam").classList.add("hide");$("results").classList.remove("hide");
- $("results").innerHTML='<section class="card"><h2>歷次成績</h2>'+(entries.length?entries.slice().reverse().map(e=>'<p>'+esc(e.date)+'　'+e.score+'／'+e.max+' 分</p>').join(""):'<p>尚無歷次考試紀錄。</p>')+'</section>';
-};
+summary();
 </script></body></html>
