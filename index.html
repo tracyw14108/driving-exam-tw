@@ -27,7 +27,7 @@ button:disabled{opacity:.43;cursor:not-allowed}
 <div class="chips"><span class="chip">文字題庫</span><span class="chip">隨機 50 題</span><span class="chip">每題 2 分</span><span class="chip">共 100 分</span></div>
 <p class="muted">題庫：115.5.29｜每頁 10 題。全部交卷後才公布答案。</p>
 <div class="actions"><button class="primary" id="newExam">開始新的 50 題模擬考</button><button id="wrongExam">錯題重練</button><button id="showHistory">歷次成績</button><button id="mistakeLibrary">錯題庫・常錯分析</button></div>
-<div id="homeStats" class="stats" style="margin-top:16px"></div><p id="status" aria-live="polite" class="small muted">網站已準備完成。點選開始測驗即可。</p>
+<div id="homeStats" class="stats" style="margin-top:16px"></div><div id="coverageStat" class="card" style="margin:12px 0;background:#f8fbff"></div><p id="status" aria-live="polite" class="small muted">網站已準備完成。點選開始測驗即可。</p>
 </header>
 <section id="exam" class="hide">
 <div class="card"><div class="nav"><b id="progressText"></b><b id="pageText"></b></div><div class="progress" style="margin-top:12px"><div id="progressFill"></div></div></div>
@@ -78,7 +78,12 @@ function summary(){
  const hist=read(HISTORY,[]);
  const rec=records();
  const freq=Object.values(rec).reduce((n,r)=>n+(Number(r.wrong)||0),0);
+ const seenIds=new Set(Object.entries(rec).filter(([id,row])=>Number(row.seen)>0).map(([id])=>Number(id)));
+ const tried=read("driving-attempted-ids-v1",[]);
+ for(const id of tried){if(Number.isInteger(Number(id))&&Number(id)>=1&&Number(id)<=1090)seenIds.add(Number(id))}
+ const tested=seenIds.size,pct=(tested/1090*100);
  $("homeStats").innerHTML='<div><div class="count">'+hist.length+'</div><div class="small">已完成測驗</div></div><div><div class="count">'+wrongIds().length+'</div><div class="small">累積錯題</div></div><div><div class="count">'+freq+'</div><div class="small">新版累計答錯次數</div></div>';
+ $("coverageStat").innerHTML='<div class="nav"><b>已測驗不重複題數</b><b>'+tested+' / 1,090 題</b></div><div class="progress" style="margin:12px 0 8px"><div style="width:'+pct.toFixed(2)+'%"></div></div><p class="muted small">完成 '+pct.toFixed(1)+'%　｜　剩餘 '+(1090-tested)+' 題未出現在已交卷考卷中。重複考同一題只計一次。</p>';
 }
 async function loadBank(){
  if(bank)return bank;
@@ -142,6 +147,9 @@ $("submit").onclick=()=>{
    prev.category=category(q);old[q.n]=prev;
  });
  write(KEY,old);
+ const attempted=new Set(read("driving-attempted-ids-v1",[]).map(Number));
+ round.forEach((q,i)=>{if(chosen[i])attempted.add(q.n)});
+ write("driving-attempted-ids-v1",[...attempted].sort((a,b)=>a-b));
  const history=read(HISTORY,[]),score=(round.length-mistakes.length)*2;
  history.push({date:now,score,max:round.length*2,wrong:mistakes.length,answered:round.length,kind:round.length===50?"正式模擬考":"錯題練習"});
  write(HISTORY,history);
