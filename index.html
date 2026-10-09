@@ -23,12 +23,12 @@ async function begin(wrong){
  exam=shuffle(pool).slice(0,Math.min(50,pool.length));ans={};idx=0;finished=false;el('result').classList.add('hide');el('test').classList.remove('hide');draw();el('test').scrollIntoView()
  }catch(e){el('message').textContent='載入失敗：'+e.message;}finally{el('start').disabled=false}
 }
-function note(q){let t=q.t||q.text||'';if(/酒駕|酒精|酒測|酒後/.test(t))return '注意酒駕的金額、年限與吊扣、吊銷差別。';if(/停車|臨時停車|黃線|紅線/.test(t))return '分辨禁止停車與禁止臨時停車的路段及時段。';if(/方向燈|變換車道/.test(t))return '換道前打燈、確認死角並注意直行車。';return '重看題目中的數字、限制條件與禁止事項。'}
+function note(q){let t=q.txt||'';if(/酒駕|酒精|酒測|酒後/.test(t))return '注意酒駕的金額、年限與吊扣、吊銷差別。';if(/停車|臨時停車|黃線|紅線/.test(t))return '分辨禁止停車與禁止臨時停車的路段及時段。';if(/方向燈|變換車道/.test(t))return '換道前打燈、確認死角並注意直行車。';return '重看題目中的數字、限制條件與禁止事項。'}
 function draw(){
  let part=exam.slice(idx*10,idx*10+10);
  el('progress').textContent='已答 '+Object.keys(ans).length+'／'+exam.length+' 題';
  el('pageno').textContent='第 '+(idx+1)+'／'+Math.ceil(exam.length/10)+' 頁';
- el('qs').innerHTML=part.map((q,k)=>{let i=idx*10+k,opts=q.opts||q.options||[];return '<article class="card q"><div class="muted">第 '+(i+1)+' 題｜原題號 '+q.n+'</div>'+ (q.img?'<img loading="lazy" alt="第 '+(i+1)+' 題圖示" src="data:image/png;base64,'+q.img+'">':'')+(q.t?'<h3>'+escapeHTML(q.t)+'</h3>':q.text?'<h3>'+escapeHTML(q.text)+'</h3>':'')+'<div class="choices">'+[1,2,3].map(v=>'<button class="'+(ans[i]===v?'sel':'')+'" onclick="choose('+i+','+v+')">（'+v+'）'+(opts[v-1]?escapeHTML(opts[v-1]):'')+'</button>').join('')+'</div></article>'}).join('');
+ el('qs').innerHTML=part.map((q,k)=>{let i=idx*10+k,opts=q.opts||q.options||[];return '<article class="card q"><div class="muted">第 '+(i+1)+' 題｜原題號 '+q.n+'</div>'+ (q.img?'<img loading="lazy" alt="第 '+(i+1)+' 題圖示" src="data:image/png;base64,'+q.img+'">':'')+''+'<div class="choices">'+[1,2,3].map(v=>'<button class="'+(ans[i]===v?'sel':'')+'" onclick="choose('+i+','+v+')">（'+v+'）'+(opts[v-1]?escapeHTML(opts[v-1]):'')+'</button>').join('')+'</div></article>'}).join('');
 }
 function escapeHTML(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function choose(i,v){ans[i]=v;draw()}
