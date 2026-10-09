@@ -76,6 +76,8 @@ window.DrivingCloud={
  sync:syncNow,
  connected(){return !!uid()}
 };
+// Freeze a one-time, per-browser legacy snapshot before any new cloud-enabled test.
+ensureBaseline();
 if(!configOK){
  info("雲端同步待啟用：需先完成 Firebase 專案設定。現有本機紀錄照常保存。");
  if(login)login.disabled=true;return;
