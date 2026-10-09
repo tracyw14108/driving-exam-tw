@@ -27,7 +27,7 @@ button:disabled{opacity:.43;cursor:not-allowed}
 <div class="chips"><span class="chip">文字題庫</span><span class="chip">隨機 50 題</span><span class="chip">每題 2 分</span><span class="chip">共 100 分</span></div>
 <p class="muted">題庫：115.5.29｜每頁 10 題。全部交卷後才公布答案。</p>
 <div class="actions"><button class="primary" id="newExam">開始新的 50 題模擬考</button><button id="wrongExam">錯題重練</button><button id="showHistory">歷次成績</button><button id="mistakeLibrary">錯題庫・常錯分析</button></div>
-<div id="homeStats" class="stats" style="margin-top:16px"></div><div id="coverageStat" class="card" style="margin:12px 0;background:#f8fbff"></div><p id="status" aria-live="polite" class="small muted">網站已準備完成。點選開始測驗即可。</p>
+<div id="homeStats" class="stats" style="margin-top:16px"></div><div id="coverageStat" class="card" style="margin:12px 0;background:#f8fbff"></div><div class="card" style="background:#f8fbff"><div class="nav"><b>Google 雲端同步</b><span class="tag">跨裝置</span></div><p class="small muted" id="syncStatus">讀取同步設定中…</p><div class="actions"><button id="googleLogin" type="button">使用 Google 登入</button><button id="googleLogout" type="button" hidden>登出 Google</button><button type="button" onclick="window.DrivingCloud?.sync()">立即同步</button></div></div><p id="status" aria-live="polite" class="small muted">網站已準備完成。點選開始測驗即可。</p>
 </header>
 <section id="exam" class="hide">
 <div class="card"><div class="nav"><b id="progressText"></b><b id="pageText"></b></div><div class="progress" style="margin-top:12px"><div id="progressFill"></div></div></div>
@@ -167,8 +167,11 @@ $("submit").onclick=()=>{
  round.forEach((q,i)=>{if(chosen[i])attempted.add(q.n)});
  write("driving-attempted-ids-v1",[...attempted].sort((a,b)=>a-b));
  const history=read(HISTORY,[]),score=(round.length-mistakes.length)*2;
- history.push({date:now,score,max:round.length*2,wrong:mistakes.length,answered:round.length,kind:round.length===50?"正式模擬考":"錯題練習"});
+ const sessionId=(crypto?.randomUUID?.()||Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));
+ const cloudSession={id:sessionId,date:now,score,max:round.length*2,wrong:mistakes.length,answered:round.length,kind:round.length===50?"正式模擬考":"錯題練習",answers:round.map((q,i)=>({n:q.n,selected:chosen[i]||null,correct:q.a})),deviceId:"browser",createdAt:new Date().toISOString()};
+ history.push({id:sessionId,date:now,score,max:round.length*2,wrong:mistakes.length,answered:round.length,kind:cloudSession.kind});
  write(HISTORY,history);
+ window.DrivingCloud?.recordSession(cloudSession);
  const ids=new Set(legacyWrong());mistakes.forEach(({q})=>ids.add(q.n));write(OLD_WRONG,[...ids]);
  $("exam").classList.add("hide");$("results").classList.remove("hide");
  $("results").innerHTML='<section class="card"><h2>本次成績：'+score+'／'+round.length*2+' 分</h2><p>答對 '+(round.length-mistakes.length)+' 題、答錯 '+mistakes.length+' 題。</p><div class="actions"><button class="primary" id="again">再抽 50 題</button><button id="review">查看累積錯題庫</button></div></section>'+mistakes.map(({q,i})=>itemCard(q,chosen[i],old[q.n].wrong,false)).join("");
@@ -196,4 +199,10 @@ $("showHistory").onclick=()=>{
  window.scrollTo(0,0);
 };
 summary();
-</script></body></html>
+</script>
+<script defer src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/11.6.0/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore-compat.js"></script>
+<script defer src="./firebase-config.js"></script>
+<script defer src="./cloud-sync.js?v=2"></script>
+</body></html>
