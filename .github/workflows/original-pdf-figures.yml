@@ -22,8 +22,24 @@ jobs:
           import fitz
           from PIL import Image,ImageOps,ImageEnhance,ImageFilter,ImageDraw,ImageFont
           req=urllib.request.Request(os.environ['PDF_URL'],headers={'User-Agent':'Mozilla/5.0'})
-          with urllib.request.urlopen(req,timeout=60) as response:
-            raw=response.read()
+          import time
+          raw=None
+          for attempt in range(1,5):
+            try:
+              request=urllib.request.Request(os.environ['PDF_URL'],headers={
+                'User-Agent':'Mozilla/5.0 (compatible; DriveExamImageRestore/1.0)',
+                'Accept':'application/pdf,*/*;q=0.8',
+                'Referer':'https://ws.thb.gov.tw/'})
+              with urllib.request.urlopen(request,timeout=90) as response:
+                raw=response.read()
+              if raw.startswith(b'%PDF-'):
+                print('Downloaded verified PDF,',len(raw),'bytes')
+                break
+              raise RuntimeError('Downloaded source is not a PDF')
+            except Exception as e:
+              print('Download attempt',attempt,'failed:',str(e),flush=True)
+              if attempt==4:raise
+              time.sleep(attempt*4)
           if not raw.startswith(b'%PDF-'):raise RuntimeError('Official file download did not return a PDF')
           pdf=fitz.open(stream=raw,filetype='pdf')
           if len(pdf)!=80:raise RuntimeError('Source PDF does not have expected 80 pages')
@@ -45,6 +61,7 @@ jobs:
           flagged={q['n'] for q in bank if q.get('fig')}
           missing=sorted(flagged-images.keys())
           if missing:raise RuntimeError('Original PDF diagrams missing: '+str(missing))
+          print('Verified exact correspondence for',len(flagged),'image questions')
           out=pathlib.Path('figures-hq');out.mkdir(exist_ok=True)
           for n in sorted(flagged):
             parts=[im for x,im in sorted(images[n],key=lambda v:v[0])]
@@ -67,6 +84,21 @@ jobs:
             large=large.filter(ImageFilter.UnsharpMask(radius=1.0,percent=115,threshold=2))
             large.save(out/f'{n}.png',optimize=True)
           print('PASS: replaced',len(flagged),'diagram images from original PDF; no question data changed')
+          PY
+      - name: Verify generated image files
+        run: |
+          python - <<'PY'
+          import json,pathlib
+          from PIL import Image
+          bank=json.loads(pathlib.Path('data/quiz-text.json').read_text(encoding='utf-8'))
+          numbers=[q['n'] for q in bank if q.get('fig')]
+          assert len(numbers)==189, f'Unexpected image question count: {len(numbers)}'
+          for n in numbers:
+            file=pathlib.Path('figures-hq')/f'{n}.png'
+            assert file.exists() and file.stat().st_size>1500, f'Missing or empty image: {n}'
+            with Image.open(file) as im:
+              im.verify()
+          print('Verified',len(numbers),'original PDF question images')
           PY
       - name: Commit image files only
         run: |
