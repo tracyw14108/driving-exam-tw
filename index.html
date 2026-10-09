@@ -1,1 +1,45 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>汽車筆試模擬考</title><meta http-equiv="refresh" content="0;url=./exam-lite.html"></head><body><p>正在開啟 iPad 輕量版測驗…</p><a href="./exam-lite.html">若未自動開啟，請按這裡</a><script>location.replace('./exam-lite.html')</script></body></html>
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>汽車筆試｜隨機50題</title><style>
+*{box-sizing:border-box}body{background:#f5f7fb;color:#243047;margin:0;font:16px system-ui,-apple-system,"Noto Sans TC",sans-serif}main{max-width:760px;margin:auto;padding:18px 14px 60px}.card{background:#fff;border:1px solid #dce3ef;border-radius:14px;padding:18px;margin:13px 0}h1{font-size:24px;margin:0 0 12px}h3{line-height:1.6}button{font:inherit;border:1px solid #bfcadc;border-radius:9px;background:#fff;padding:10px 15px;cursor:pointer;min-height:44px}.primary{background:#254b7b;color:white;border-color:#254b7b}.muted{color:#627188}.choices{display:grid;gap:8px}.choices button{text-align:left;line-height:1.5}.choices button.sel{border:2px solid #2860ae;background:#e6f0ff}.nav{display:flex;justify-content:space-between;align-items:center;gap:10px}.hide{display:none}.q img{max-width:100%;height:auto;border-radius:7px;margin:12px 0}.warn{color:#9a511f}.note{padding:12px;background:#f4f7ff;border-radius:9px}.meta{display:flex;flex-wrap:wrap;gap:10px}.meta span{background:#eff3fb;padding:6px 10px;border-radius:20px}
+</style></head><body><main><section class="card"><h1>汽車駕照筆試模擬考</h1><div class="meta"><span>題庫 1,090 題</span><span>隨機 50 題</span><span>每題 2 分</span></div><p class="muted">115.5.29 題庫｜一次顯示 10 題，交卷前不顯示正解。</p><button class="primary" id="start" onclick="begin(false)">開始新的 50 題模擬考</button> <button onclick="begin(true)">錯題重練</button><p id="message" aria-live="polite" class="muted">首頁已載入。按開始後才會載入題庫，避免 iPad 卡在空白畫面。</p></section><section id="test" class="hide"><div class="card nav"><b id="progress"></b><button onclick="finish()">交卷並計分</button></div><div id="qs"></div><section class="card nav"><button onclick="step(-1)">上一頁</button><span id="pageno"></span><button onclick="step(1)">下一頁</button></section></section><section id="result" class="hide"></section></main><script>
+let bank=null,exam=[],ans={},idx=0,finished=false;
+const el=id=>document.getElementById(id);
+function shuffle(a){let v=a.slice();for(let i=v.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[v[i],v[j]]=[v[j],v[i]]}return v}
+function read(k){try{return JSON.parse(localStorage.getItem(k)||'[]')}catch{return []}}
+async function loadBank(){
+ if(bank)return bank;
+ el('message').textContent='正在讀取完整題庫（第一次約需數秒，請稍候）…';
+ const response=await fetch('./exam-lite.html?v=20261009',{cache:'force-cache'});
+ if(!response.ok)throw Error('題庫下載失敗（HTTP '+response.status+'）');
+ const html=await response.text();
+ const begin=html.indexOf('const BANK='),ending=html.indexOf('];\nconst TOPICS=',begin);
+ if(begin<0||ending<0)throw Error('題庫格式不符，請告訴我錯誤訊息');
+ const data=JSON.parse(html.slice(begin+11,ending+1));
+ if(data.length!==1090)throw Error('題目數量不符：'+data.length);
+ bank=data;el('message').textContent='題庫 1,090 題載入成功。';
+ return bank;
+}
+async function begin(wrong){
+ try{el('start').disabled=true;const all=await loadBank();let ids=read('driving-wrong-ids');let pool=wrong?all.filter(q=>ids.includes(q.n)):all;if(!pool.length){el('message').textContent='目前尚無錯題，請先完成一次模擬考。';return}
+ exam=shuffle(pool).slice(0,Math.min(50,pool.length));ans={};idx=0;finished=false;el('result').classList.add('hide');el('test').classList.remove('hide');draw();el('test').scrollIntoView()
+ }catch(e){el('message').textContent='載入失敗：'+e.message;}finally{el('start').disabled=false}
+}
+function note(q){let t=q.t||q.text||'';if(/酒駕|酒精|酒測|酒後/.test(t))return '注意酒駕的金額、年限與吊扣、吊銷差別。';if(/停車|臨時停車|黃線|紅線/.test(t))return '分辨禁止停車與禁止臨時停車的路段及時段。';if(/方向燈|變換車道/.test(t))return '換道前打燈、確認死角並注意直行車。';return '重看題目中的數字、限制條件與禁止事項。'}
+function draw(){
+ let part=exam.slice(idx*10,idx*10+10);
+ el('progress').textContent='已答 '+Object.keys(ans).length+'／'+exam.length+' 題';
+ el('pageno').textContent='第 '+(idx+1)+'／'+Math.ceil(exam.length/10)+' 頁';
+ el('qs').innerHTML=part.map((q,k)=>{let i=idx*10+k,opts=q.opts||q.options||[];return '<article class="card q"><div class="muted">第 '+(i+1)+' 題｜原題號 '+q.n+'</div>'+ (q.img?'<img loading="lazy" alt="第 '+(i+1)+' 題圖示" src="data:image/png;base64,'+q.img+'">':'')+(q.t?'<h3>'+escapeHTML(q.t)+'</h3>':q.text?'<h3>'+escapeHTML(q.text)+'</h3>':'')+'<div class="choices">'+[1,2,3].map(v=>'<button class="'+(ans[i]===v?'sel':'')+'" onclick="choose('+i+','+v+')">（'+v+'）'+(opts[v-1]?escapeHTML(opts[v-1]):'')+'</button>').join('')+'</div></article>'}).join('');
+}
+function escapeHTML(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function choose(i,v){ans[i]=v;draw()}
+function step(d){idx=Math.max(0,Math.min(Math.ceil(exam.length/10)-1,idx+d));draw();el('test').scrollIntoView()}
+function finish(){
+ const missing=exam.length-Object.keys(ans).length;if(missing&&!confirm('還有 '+missing+' 題未作答，確定交卷？'))return;
+ let wrong=exam.map((q,i)=>({q,i})).filter(({q,i})=>ans[i]!==q.a);
+ const ids=new Set(read('driving-wrong-ids'));wrong.forEach(({q})=>ids.add(q.n));localStorage.setItem('driving-wrong-ids',JSON.stringify([...ids]));
+ const score=(exam.length-wrong.length)*2;let history=read('driving-score-history');history.push({date:new Date().toISOString(),score,total:exam.length*2});localStorage.setItem('driving-score-history',JSON.stringify(history));
+ el('test').classList.add('hide');el('result').classList.remove('hide');
+ el('result').innerHTML='<section class="card"><h2>本次成績：'+score+'／'+(exam.length*2)+' 分</h2><p>答對 '+(exam.length-wrong.length)+' 題、答錯 '+wrong.length+' 題</p><button onclick="begin(false)" class="primary">再抽 50 題</button> <button onclick="begin(true)">錯題重練</button></section>'+wrong.map(({q,i})=>'<section class="card"><b>原題號 '+q.n+'</b>'+(q.img?'<img style="max-width:100%;display:block;margin:12px 0" loading="lazy" src="data:image/png;base64,'+q.img+'">':'')+'<p>你的答案：'+(ans[i]||'未作答')+'；正解：'+q.a+'</p><div class="note">'+note(q)+'</div></section>').join('');
+ window.scrollTo(0,0)
+}
+</script></body></html>
