@@ -58,9 +58,10 @@ async function syncNow(){
  try{
   const user=uid(),root=db.collection("drivingUsers").doc(user),baseline=ensureBaseline();
   await root.set({schemaVersion:1,ownerUid:user,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
-  await root.collection("legacyImports").doc(baseline.id).set(baseline);
+  const legacyRef=root.collection("legacyImports").doc(baseline.id);
+  if(!(await legacyRef.get()).exists)await legacyRef.set(baseline);
   const queue=read(S,[]);
-  for(const session of queue){await root.collection("examSessions").doc(session.id).set(session)}
+  for(const session of queue){const ref=root.collection("examSessions").doc(session.id);if(!(await ref.get()).exists)await ref.set(session)}
   const [oldSnap,sessionSnap]=await Promise.all([root.collection("legacyImports").get(),root.collection("examSessions").get()]);
   const imports=oldSnap.docs.map(x=>x.data()),sessions=sessionSnap.docs.map(x=>x.data());
   const merged=derive(imports,sessions);
