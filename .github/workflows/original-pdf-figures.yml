@@ -15,7 +15,7 @@ jobs:
         run: python -m pip install --quiet pymupdf pillow
       - name: Extract original embedded diagram images
         env:
-          PDF_URL: "https://ws.thb.gov.tw/Download.ashx?icon=..pdf&n=5rG96LuK562G6Kmm6aGM5bqrX%2BWFrOWRijExNS4wNS4yOS5wZGY%3D&u=LzAwMS9VcGxvYWQvNDM2L3JlbGZpbGUvMTI4MjMvMjk3NzM5L2RmNjY0NmM3LTZjZTQtNGMzMy1iZTU4LWJhYWYzNTdkYmQ0MC5wZGY%3D"
+          PDF_URL: "https://ws.thb.gov.tw/Download.ashx?icon=..pdf&n=5rG96LuK562G6Kmm6aGM5bqrX%2BWFrOWRijExNS4wNi45LnBkZg%3D%3D&u=LzAwMS9VcGxvYWQvNDM2L3JlbGZpbGUvMTI4MjMvMjk5NzYwLzM4OGQ5MzE1LTIxNTktNDVhNC1hZjVkLTc1OGNhNTg3ZjljMC5wZGY%3D"
         run: |
           python - <<'PY'
           import urllib.request,os,pathlib,json,re,io,collections
