@@ -1,0 +1,47 @@
+name: Enhance exam diagram assets
+on:
+  push:
+    paths:
+      - '.github/workflows/enhance-figures.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  figures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --quiet pillow
+      - name: Make lossless complete and zoomable sign images
+        run: |
+          python3 - <<'PY'
+          from PIL import Image,ImageOps,ImageEnhance,ImageFilter
+          import json,pathlib
+          bank=json.loads(pathlib.Path('data/quiz-text.json').read_text(encoding='utf-8'))
+          out=pathlib.Path('figures-hq');out.mkdir(exist_ok=True)
+          count=0
+          for q in bank:
+            if not q.get('fig'):continue
+            src=pathlib.Path('figures')/f"{q['n']}.png"
+            if not src.exists():raise RuntimeError(f'missing {src}')
+            im=Image.open(src).convert('RGB')
+            # Never crop the supplied figure; keep every edge of the existing diagram.
+            im=ImageOps.expand(im,border=12,fill='white')
+            factor=max(2,min(5,int(680/max(1,im.width))))
+            im=im.resize((im.width*factor,im.height*factor),Image.Resampling.LANCZOS)
+            im=ImageEnhance.Contrast(im).enhance(1.12)
+            im=im.filter(ImageFilter.UnsharpMask(radius=1.1,percent=135,threshold=3))
+            im.save(out/f"{q['n']}.png",optimize=True)
+            count+=1
+          print('Enhanced diagrams:',count)
+          assert count==sum(bool(q.get('fig')) for q in bank)
+          PY
+      - name: Commit assets
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add figures-hq/
+          if ! git diff --cached --quiet; then
+            git commit -m "Add full-frame upscaled diagram images with zoom support"
+            git push
+          fi
