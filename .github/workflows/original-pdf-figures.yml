@@ -1,0 +1,79 @@
+name: Replace only traffic-sign images with original PDF embedded assets
+on:
+  push:
+    paths:
+      - '.github/workflows/original-pdf-figures.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install extraction tools
+        run: python -m pip install --quiet pymupdf pillow
+      - name: Extract original embedded diagram images
+        env:
+          PDF_URL: "https://ws.thb.gov.tw/Download.ashx?icon=..pdf&n=5rG96LuK562G6Kmm6aGM5bqrX%2BWFrOWRijExNS4wNS4yOS5wZGY%3D&u=LzAwMS9VcGxvYWQvNDM2L3JlbGZpbGUvMTI4MjMvMjk3NzM5L2RmNjY0NmM3LTZjZTQtNGMzMy1iZTU4LWJhYWYzNTdkYmQ0MC5wZGY%3D"
+        run: |
+          python - <<'PY'
+          import urllib.request,os,pathlib,json,re,io,collections
+          import fitz
+          from PIL import Image,ImageOps,ImageEnhance,ImageFilter,ImageDraw,ImageFont
+          req=urllib.request.Request(os.environ['PDF_URL'],headers={'User-Agent':'Mozilla/5.0'})
+          with urllib.request.urlopen(req,timeout=60) as response:
+            raw=response.read()
+          if not raw.startswith(b'%PDF-'):raise RuntimeError('Official file download did not return a PDF')
+          pdf=fitz.open(stream=raw,filetype='pdf')
+          if len(pdf)!=80:raise RuntimeError('Source PDF does not have expected 80 pages')
+          images=collections.defaultdict(list)
+          for pg in pdf:
+            words=pg.get_text('words')
+            numbers=[(int(w[4]),(w[1]+w[3])/2) for w in words if re.fullmatch(r'[0-9]{1,4}',w[4]) and w[0]<115 and 1<=int(w[4])<=1090]
+            for embedded in pg.get_images(full=True):
+              xref=embedded[0]
+              for box in pg.get_image_rects(xref):
+                cy=(box.y0+box.y1)/2
+                nearest=sorted((abs(cy,y),n) for n,y in numbers if abs(cy-y)<25)
+                if nearest:
+                  n=nearest[0][1]
+                  info=pdf.extract_image(xref)
+                  im=Image.open(io.BytesIO(info['image'])).convert('RGB')
+                  images[n].append((box.x0,im))
+          bank=json.loads(pathlib.Path('data/quiz-text.json').read_text(encoding='utf-8'))
+          flagged={q['n'] for q in bank if q.get('fig')}
+          missing=sorted(flagged-images.keys())
+          if missing:raise RuntimeError('Original PDF diagrams missing: '+str(missing))
+          out=pathlib.Path('figures-hq');out.mkdir(exist_ok=True)
+          for n in sorted(flagged):
+            parts=[im for x,im in sorted(images[n],key=lambda v:v[0])]
+            if len(parts)>1:
+              # A complete strip preserves all 3 alternative symbol graphics, left-to-right.
+              width=max(170,max(z.width for z in parts))
+              border=15;cell=width+2*border;h=max(z.height for z in parts)+2*border+26
+              joined=Image.new('RGB',(cell*len(parts),h),'white');dr=ImageDraw.Draw(joined)
+              for i,im in enumerate(parts):
+                x=i*cell+border+(width-im.width)//2
+                joined.paste(im,(x,border+22))
+                dr.text((i*cell+12,8),f'({i+1})',fill=(20,20,20))
+              src=joined
+            else:src=ImageOps.expand(parts[0],border=12,fill='white')
+            # Lossless enlargement for legibility. Source image is extracted directly;
+            # no rescreenshotting of tiny PDF row crops or destructive trimming.
+            scale=max(3,min(6,int(1050/max(src.size))))
+            large=src.resize((src.width*scale,src.height*scale),Image.Resampling.LANCZOS)
+            large=ImageEnhance.Contrast(large).enhance(1.08)
+            large=large.filter(ImageFilter.UnsharpMask(radius=1.0,percent=115,threshold=2))
+            large.save(out/f'{n}.png',optimize=True)
+          print('PASS: replaced',len(flagged),'diagram images from original PDF; no question data changed')
+          PY
+      - name: Commit image files only
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -- figures-hq/
+          if ! git diff --cached --quiet; then
+            git commit -m "Improve original traffic-sign images only (no app or history changes)"
+            git push
+          fi
