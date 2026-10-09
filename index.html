@@ -71,7 +71,7 @@ async function newRound(onlyWrong=false){
  finally{$("newExam").disabled=false}
 }
 function render(){
- const count=Object.keys(chosen).length;
+ const count=round.filter((q,i)=>chosen[i]).length;
  $("progressText").textContent="已答 "+count+"／"+round.length+" 題";
  $("progressFill").style.width=(count/round.length*100)+"%";
  $("pageText").textContent="第 "+(page+1)+"／"+Math.ceil(round.length/10)+" 頁";
@@ -84,14 +84,14 @@ function render(){
   return '<article class="card"><h3>第 '+(i+1)+' 題 <span class="muted small">原題號 '+q.n+'</span></h3>'+
     '<div class="imgstatus" id="loading-'+i+'">題目圖片載入中…</div>'+
     '<img class="question-img hide" loading="eager" alt="原題號 '+q.n+' 的完整題目與三個選項" id="image-'+i+'">'+
-    '<div class="choices" id="choices-'+i+'">'+[1,2,3].map(v=>'<button class="option '+(chosen[i]===v?"selected":"")+'" data-i="'+i+'" data-choice="'+v+'" type="button" '+(!chosen["loaded-"+i]?"disabled":"")+'>（'+v+'）'+(chosen[i]===v?" 已選取":"")+'</button>').join("")+'</div></article>';
+    '<div class="choices" id="choices-'+i+'">'+[1,2,3].map(v=>'<button class="option '+(chosen[i]===v?"selected":"")+'" data-i="'+i+'" data-choice="'+v+'" type="button" '+"disabled"+'>（'+v+'）'+(chosen[i]===v?" 已選取":"")+'</button>').join("")+'</div></article>';
  }).join("");
  const token=epoch;
  slice.forEach((q,j)=>{const i=start+j,im=$("image-"+i),load=$("loading-"+i);
   im.onload=()=>{
    if(epoch!==token||!document.contains(im))return;
    im.classList.remove("hide");load.classList.add("hide");
-   chosen["loaded-"+i]=true;
+   
    $("choices-"+i).querySelectorAll("button").forEach(b=>b.disabled=false);
   };
   im.onerror=()=>{
