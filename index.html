@@ -1,75 +1,148 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>汽車筆試｜隨機50題</title><style>
-*{box-sizing:border-box}body{background:#f5f7fb;color:#243047;margin:0;font:16px system-ui,-apple-system,"Noto Sans TC",sans-serif}main{max-width:760px;margin:auto;padding:18px 14px 60px}.card{background:#fff;border:1px solid #dce3ef;border-radius:14px;padding:18px;margin:13px 0}h1{font-size:24px;margin:0 0 12px}h3{line-height:1.6}button{font:inherit;border:1px solid #bfcadc;border-radius:9px;background:#fff;padding:10px 15px;cursor:pointer;min-height:44px}.primary{background:#254b7b;color:white;border-color:#254b7b}.muted{color:#627188}.choices{display:grid;gap:8px}.choices button{text-align:left;line-height:1.5}.choices button.sel{border:2px solid #2860ae;background:#e6f0ff}.nav{display:flex;justify-content:space-between;align-items:center;gap:10px}.hide{display:none}.q img{max-width:100%;height:auto;border-radius:7px;margin:12px 0}.warn{color:#9a511f}.note{padding:12px;background:#f4f7ff;border-radius:9px}.meta{display:flex;flex-wrap:wrap;gap:10px}.meta span{background:#eff3fb;padding:6px 10px;border-radius:20px}
-</style></head><body><main><section class="card"><h1>汽車駕照筆試模擬考</h1><div class="meta"><span>題庫 1,090 題</span><span>隨機 50 題</span><span>每題 2 分</span></div><p class="muted">115.5.29 題庫｜一次顯示 10 題，交卷前不顯示正解。</p><button class="primary" id="start" onclick="begin(false)">開始新的 50 題模擬考</button> <button onclick="begin(true)">錯題重練</button><p id="message" aria-live="polite" class="muted">首頁已載入。按開始後才會載入題庫，避免 iPad 卡在空白畫面。</p></section><section id="test" class="hide"><div class="card nav"><b id="progress"></b><button onclick="finish()">交卷並計分</button></div><div id="qs"></div><section class="card nav"><button onclick="step(-1)">上一頁</button><span id="pageno"></span><button onclick="step(1)">下一頁</button></section></section><section id="result" class="hide"></section></main><script>
-let bank=null,exam=[],ans={},idx=0,finished=false;
-const el=id=>document.getElementById(id);
-function shuffle(a){let v=a.slice();for(let i=v.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[v[i],v[j]]=[v[j],v[i]]}return v}
-function read(k){try{return JSON.parse(localStorage.getItem(k)||'[]')}catch{return []}}
-const imageChunks=new Map();
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>汽車筆試模擬考｜115.5.29</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;color:#233247;background:#f3f6fa}
+*{box-sizing:border-box}body{margin:0}main{max-width:780px;margin:0 auto;padding:18px 14px 72px}
+.card{background:#fff;border:1px solid #d9e1ed;border-radius:15px;padding:18px;margin:13px 0}
+h1{font-size:25px;margin:0 0 10px}h2{margin:7px 0 12px;font-size:22px}h3{margin:5px 0 12px;font-size:17px;line-height:1.6}
+button{font:inherit;min-height:44px;border:1px solid #aebbd0;border-radius:10px;padding:10px 14px;background:#fff;color:#1f446f;cursor:pointer}
+button.primary{background:#244a7a;color:white;border-color:#244a7a}
+button:disabled{opacity:.43;cursor:not-allowed}
+.actions{display:flex;gap:9px;flex-wrap:wrap}.muted{color:#65748a}.small{font-size:13px}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0}.chip{background:#edf2f9;border-radius:18px;padding:7px 11px}
+.question-img{display:block;width:100%;height:auto;border:1px solid #edf0f5;border-radius:8px}
+.option{display:block;text-align:left;width:100%;margin:7px 0;color:#1c426f}
+.option.selected{background:#e2efff;border:2px solid #326bb4}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hide{display:none!important}.error{color:#ae3636}.good{color:#176644}.note{background:#eef4fa;padding:12px;border-radius:10px}
+.progress{height:8px;background:#e8eef7;border-radius:5px;overflow:hidden}.progress div{height:100%;background:#3269a7;transition:width .15s}
+.imgstatus{color:#687992;padding:12px 0}.review img{max-width:100%;border:1px solid #eee}
+</style></head>
+<body><main>
+<header class="card">
+<h1>汽車駕照筆試模擬考</h1>
+<div class="chips"><span class="chip">1,090 題</span><span class="chip">隨機 50 題</span><span class="chip">每題 2 分</span><span class="chip">共 100 分</span></div>
+<p class="muted">題庫：115.5.29｜每頁 10 題。全部交卷後才公布答案。</p>
+<div class="actions"><button class="primary" id="newExam">開始新的 50 題模擬考</button><button id="wrongExam">錯題重練</button><button id="showHistory">歷次成績</button></div>
+<p id="status" aria-live="polite" class="small muted">網站已準備完成。點選開始測驗即可。</p>
+</header>
+<section id="exam" class="hide">
+<div class="card"><div class="nav"><b id="progressText"></b><b id="pageText"></b></div><div class="progress" style="margin-top:12px"><div id="progressFill"></div></div></div>
+<div id="questionList"></div>
+<div class="card nav"><button id="previous">上一頁</button><button id="next">下一頁</button><button id="submit" class="primary">交卷並計分</button></div>
+</section>
+<section id="results" class="hide"></section>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+let bank=null,round=[],chosen={},page=0,epoch=0;
+const storeRead=k=>{try{return JSON.parse(localStorage.getItem(k)||"[]")}catch{return []}};
+const storeWrite=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function shuffled(input){let a=input.slice();for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a}
+function setStatus(t,bad=false){$("status").textContent=t;$("status").className="small "+(bad?"error":"muted")}
 async function loadBank(){
  if(bank)return bank;
- el('message').textContent='正在讀取題庫索引…';
- const r=await fetch('./data/questions.json?v=2',{cache:'no-cache'});
- if(!r.ok)throw Error('題庫索引下載失敗（HTTP '+r.status+'）');
- const data=await r.json();
- if(!Array.isArray(data)||data.length!==1090)throw Error('題目數量錯誤：'+data?.length);
- bank=data;
- el('message').textContent='1,090 題索引已載入，圖片會在切換到各題時載入。';
- return bank;
+ setStatus("正在載入題庫索引…");
+ const response=await fetch("./data/questions.json?v=20261009-final",{cache:"no-cache"});
+ if(!response.ok)throw Error("題庫索引無法讀取（HTTP "+response.status+"）");
+ const data=await response.json();
+ if(!Array.isArray(data)||data.length!==1090||data.some(q=>!Number.isInteger(q.n)||![1,2,3].includes(q.a)))throw Error("題庫資料不完整");
+ const ids=new Set(data.map(q=>q.n));
+ if(ids.size!==1090)throw Error("題庫題號重複");
+ bank=data;return bank;
 }
-async function loadImageChunk(num){
- const id=Math.floor((num-1)/20);
- if(!imageChunks.has(id)){
-   const file=String(id).padStart(3,'0');
-   imageChunks.set(id,fetch('./data/images/'+file+'.json').then(r=>{
-     if(!r.ok)throw Error('圖片下載 HTTP '+r.status);return r.json();
-   }).catch(e=>{imageChunks.delete(id);throw e}));
- }
- return imageChunks.get(id);
+async function newRound(onlyWrong=false){
+ try{
+  $("newExam").disabled=true;
+  const all=await loadBank();
+  const wrong=storeRead("driving-wrong-ids");
+  const pool=onlyWrong?all.filter(q=>wrong.includes(q.n)):all;
+  if(!pool.length){setStatus("目前尚無錯題，請先完成一回模擬考。");return}
+  round=shuffled(pool).slice(0,Math.min(50,pool.length));chosen={};page=0;epoch++;
+  $("results").classList.add("hide");$("exam").classList.remove("hide");
+  setStatus("題庫已載入。圖片依題號逐張讀取，請等待每題圖片顯示後作答。");
+  render();$("exam").scrollIntoView({behavior:"auto"});
+ }catch(e){setStatus("無法開始測驗："+e.message,true)}
+ finally{$("newExam").disabled=false}
 }
-async function fillImages(part,pageIndex){
- await Promise.all(part.map(async(q,k)=>{
-   const targetId='pic-'+pageIndex+'-'+k;
-   try{
-     const chunk=await loadImageChunk(q.n);
-     const dest=document.getElementById(targetId);
-     if(dest){
-        const imageData=chunk[String(q.n)];
-        if(imageData){
-          const img=document.createElement('img');
-          img.alt='第 '+(pageIndex*10+k+1)+' 題題目圖片';
-          img.loading='lazy';
-          img.src='data:image/png;base64,'+imageData;
-          dest.replaceChildren(img);
-        }else dest.textContent='此題缺少圖片資料';
-     }
-   }catch(e){const dest=document.getElementById(targetId);if(dest)dest.textContent='圖片載入失敗，請重新整理：'+e.message}
- }));
+function render(){
+ const count=Object.keys(chosen).length;
+ $("progressText").textContent="已答 "+count+"／"+round.length+" 題";
+ $("progressFill").style.width=(count/round.length*100)+"%";
+ $("pageText").textContent="第 "+(page+1)+"／"+Math.ceil(round.length/10)+" 頁";
+ $("previous").disabled=(page===0);
+ $("next").disabled=(page>=Math.ceil(round.length/10)-1);
+ $("submit").disabled=(page!==Math.ceil(round.length/10)-1);
+ const start=page*10;const slice=round.slice(start,start+10);
+ $("questionList").innerHTML=slice.map((q,j)=>{
+  const i=start+j;
+  return '<article class="card"><h3>第 '+(i+1)+' 題 <span class="muted small">原題號 '+q.n+'</span></h3>'+
+    '<div class="imgstatus" id="loading-'+i+'">題目圖片載入中…</div>'+
+    '<img class="question-img hide" loading="eager" alt="原題號 '+q.n+' 的完整題目與三個選項" id="image-'+i+'">'+
+    '<div class="choices" id="choices-'+i+'">'+[1,2,3].map(v=>'<button class="option '+(chosen[i]===v?"selected":"")+'" data-i="'+i+'" data-choice="'+v+'" type="button" '+(!chosen["loaded-"+i]?"disabled":"")+'>（'+v+'）'+(chosen[i]===v?" 已選取":"")+'</button>').join("")+'</div></article>';
+ }).join("");
+ const token=epoch;
+ slice.forEach((q,j)=>{const i=start+j,im=$("image-"+i),load=$("loading-"+i);
+  im.onload=()=>{
+   if(epoch!==token||!document.contains(im))return;
+   im.classList.remove("hide");load.classList.add("hide");
+   chosen["loaded-"+i]=true;
+   $("choices-"+i).querySelectorAll("button").forEach(b=>b.disabled=false);
+  };
+  im.onerror=()=>{
+   if(epoch!==token||!document.contains(im))return;
+   load.textContent="圖片載入失敗，請按下方「重試這題圖片」。";
+   let btn=document.createElement("button");btn.textContent="重試這題圖片";btn.onclick=()=>{load.textContent="重新載入中…";load.append(btn);im.src="./images/"+q.n+".png?retry="+Date.now()};load.append(btn);
+  };
+  im.src="./images/"+q.n+".png";
+ });
 }
-async function begin(wrong){
- try{el('start').disabled=true;const all=await loadBank();let ids=read('driving-wrong-ids');let pool=wrong?all.filter(q=>ids.includes(q.n)):all;if(!pool.length){el('message').textContent='目前尚無錯題，請先完成一次模擬考。';return}
- exam=shuffle(pool).slice(0,Math.min(50,pool.length));ans={};idx=0;finished=false;el('result').classList.add('hide');el('test').classList.remove('hide');draw();el('test').scrollIntoView()
- }catch(e){el('message').textContent='載入失敗：'+e.message;}finally{el('start').disabled=false}
+$("questionList").addEventListener("click",e=>{
+ const b=e.target.closest("button[data-choice]");if(!b||b.disabled)return;
+ const i=Number(b.dataset.i),v=Number(b.dataset.choice);chosen[i]=v;
+ const region=$("choices-"+i);region.querySelectorAll("button").forEach(opt=>{
+  const selected=Number(opt.dataset.choice)===v;
+  opt.classList.toggle("selected",selected);
+  opt.textContent="（"+opt.dataset.choice+"）"+(selected?" 已選取":"");
+ });
+ const count=round.filter((_,i)=>chosen[i]).length;
+ $("progressText").textContent="已答 "+count+"／"+round.length+" 題";
+ $("progressFill").style.width=count/round.length*100+"%";
+});
+$("previous").onclick=()=>{page--;epoch++;render();$("exam").scrollIntoView()};
+$("next").onclick=()=>{page++;epoch++;render();$("exam").scrollIntoView()};
+function mnemonic(q){
+ const t=q.txt||"";
+ if(/酒|酒精|酒駕|酒測/.test(t))return "酒駕：分開比較「罰鍰、吊扣駕照、吊銷駕照、累犯年限」，尤其注意數字。";
+ if(/臨時停車|禁止停車|紅色實線|黃色實線/.test(t))return "停車：紅實線禁止臨停；黃實線禁止停車，注意規定時段。";
+ if(/方向燈|變換車道|超車/.test(t))return "變換車道：先打燈、確認後照鏡與死角、禮讓直行車。";
+ if(/輔助系統|ADAS|ACC/.test(t))return "駕駛輔助不是自動駕駛，駕駛人仍須全程監控。";
+ return "記憶方法：圈出題目的動作、數字及「何者錯誤／正確」，比較三個選項的關鍵差異。";
 }
-function note(q){let t=q.txt||'';if(/酒駕|酒精|酒測|酒後/.test(t))return '注意酒駕的金額、年限與吊扣、吊銷差別。';if(/停車|臨時停車|黃線|紅線/.test(t))return '分辨禁止停車與禁止臨時停車的路段及時段。';if(/方向燈|變換車道/.test(t))return '換道前打燈、確認死角並注意直行車。';return '重看題目中的數字、限制條件與禁止事項。'}
-function draw(){
- const page=idx,part=exam.slice(idx*10,idx*10+10);
- el('progress').textContent='已答 '+Object.keys(ans).length+'／'+exam.length+' 題';
- el('pageno').textContent='第 '+(idx+1)+'／'+Math.ceil(exam.length/10)+' 頁';
- el('qs').innerHTML=part.map((q,k)=>{let i=idx*10+k;
- return '<article class="card q"><div class="muted">第 '+(i+1)+' 題｜原題號 '+q.n+'</div><div id="pic-'+page+'-'+k+'">圖片載入中…</div><div class="choices">'+[1,2,3].map(v=>'<button class="'+(ans[i]===v?'sel':'')+'" onclick="choose('+i+','+v+')">（'+v+'）</button>').join('')+'</div></article>'}).join('');
- fillImages(part,page);
-}
-function escapeHTML(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function choose(i,v){ans[i]=v;document.querySelectorAll('.choices button').forEach(b=>{const section=b.closest('.q');if(section && section.querySelector('.muted')?.textContent?.startsWith('第 '+(i+1)+' 題'))b.classList.toggle('sel',b.textContent.includes('（'+v+'）'))});el('progress').textContent='已答 '+Object.keys(ans).length+'／'+exam.length+' 題'}
-function step(d){idx=Math.max(0,Math.min(Math.ceil(exam.length/10)-1,idx+d));draw();el('test').scrollIntoView()}
-async function finish(){
- const missing=exam.length-Object.keys(ans).length;if(missing&&!confirm('還有 '+missing+' 題未作答，確定交卷？'))return;
- let wrong=exam.map((q,i)=>({q,i})).filter(({q,i})=>ans[i]!==q.a);
- const ids=new Set(read('driving-wrong-ids'));wrong.forEach(({q})=>ids.add(q.n));localStorage.setItem('driving-wrong-ids',JSON.stringify([...ids]));
- const score=(exam.length-wrong.length)*2;let history=read('driving-score-history');history.push({date:new Date().toISOString(),score,total:exam.length*2});localStorage.setItem('driving-score-history',JSON.stringify(history));
- el('test').classList.add('hide');el('result').classList.remove('hide');
- el('result').innerHTML='<section class="card"><h2>本次成績：'+score+'／'+(exam.length*2)+' 分</h2><p>答對 '+(exam.length-wrong.length)+' 題、答錯 '+wrong.length+' 題</p><button onclick="begin(false)" class="primary">再抽 50 題</button> <button onclick="begin(true)">錯題重練</button></section>'+wrong.map(({q,i})=>'<section class="card"><b>原題號 '+q.n+'</b>'+(q.img?'<img style="max-width:100%;display:block;margin:12px 0" loading="lazy" src="data:image/png;base64,'+q.img+'">':'')+'<p>你的答案：'+(ans[i]||'未作答')+'；正解：'+q.a+'</p><div class="note">'+note(q)+'</div></section>').join('');
- window.scrollTo(0,0)
-}
+$("submit").onclick=()=>{
+ const missing=round.filter((q,i)=>!chosen[i]).length;
+ if(missing&&!confirm("還有 "+missing+" 題未作答，確定交卷？"))return;
+ const mistakes=round.map((q,i)=>({q,i})).filter(({q,i})=>chosen[i]!==q.a);
+ const score=(round.length-mistakes.length)*2;
+ const saved=new Set(storeRead("driving-wrong-ids"));mistakes.forEach(({q})=>saved.add(q.n));storeWrite("driving-wrong-ids",[...saved]);
+ const history=storeRead("driving-score-history");history.push({date:new Date().toLocaleString("zh-TW"),score,max:round.length*2,wrong:mistakes.length});storeWrite("driving-score-history",history);
+ $("exam").classList.add("hide");$("results").classList.remove("hide");
+ $("results").innerHTML='<div class="card"><h2>測驗成績：'+score+'／'+round.length*2+' 分</h2><p>答對 '+(round.length-mistakes.length)+' 題、答錯 '+mistakes.length+' 題。</p><div class="actions"><button class="primary" id="again">再抽 50 題</button><button id="wrongAgain">重練錯題</button></div></div>'+
+ mistakes.map(({q,i})=>'<article class="card review"><h3>第 '+(i+1)+' 題｜原題號 '+q.n+'</h3><img loading="lazy" src="./images/'+q.n+'.png" alt="錯題原始題目"><p><b>你的答案：</b>'+(chosen[i]||"未作答")+'　<b>正確答案：</b>'+q.a+'</p><div class="note"><b>記憶重點：</b>'+esc(mnemonic(q))+'</div></article>').join("");
+ $("again").onclick=()=>newRound(false);
+ $("wrongAgain").onclick=()=>newRound(true);
+ window.scrollTo(0,0);
+};
+$("newExam").onclick=()=>newRound(false);
+$("wrongExam").onclick=()=>newRound(true);
+$("showHistory").onclick=()=>{
+ const entries=storeRead("driving-score-history");
+ $("exam").classList.add("hide");$("results").classList.remove("hide");
+ $("results").innerHTML='<section class="card"><h2>歷次成績</h2>'+(entries.length?entries.slice().reverse().map(e=>'<p>'+esc(e.date)+'　'+e.score+'／'+e.max+' 分</p>').join(""):'<p>尚無歷次考試紀錄。</p>')+'</section>';
+};
 </script></body></html>
