@@ -35,7 +35,7 @@ jobs:
               xref=embedded[0]
               for box in pg.get_image_rects(xref):
                 cy=(box.y0+box.y1)/2
-                nearest=sorted((abs(cy,y),n) for n,y in numbers if abs(cy-y)<25)
+                nearest=sorted((abs(cy-y),n) for n,y in numbers if abs(cy-y)<25)
                 if nearest:
                   n=nearest[0][1]
                   info=pdf.extract_image(xref)
