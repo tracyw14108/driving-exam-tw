@@ -1,0 +1,36 @@
+name: Validate text-first exam
+on:
+  push:
+    paths:
+      - 'index.html'
+      - 'data/quiz-text.json'
+      - 'figures/**'
+      - '.github/workflows/validate-text.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate quiz data, visual assets and app syntax
+        run: |
+          python3 - <<'PY'
+          import json,pathlib,re,subprocess
+          data=json.loads(pathlib.Path('data/quiz-text.json').read_text('utf-8'))
+          assert len(data)>=1000
+          assert len({q['n'] for q in data})==len(data)
+          for q in data:
+            assert 1<=q['a']<=3
+            assert q['q'] and len(q['o'])==3
+            assert all(s.strip() for s in q['o'])
+            if q['fig']:
+              path=pathlib.Path('figures')/f"{q['n']}.png"
+              assert path.is_file(), f'Missing figure {q["n"]}'
+              assert path.read_bytes()[:8]==b'\x89PNG\r\n\x1a\n'
+          html=pathlib.Path('index.html').read_text('utf-8')
+          js=re.search(r'<script>(.*?)</script>',html,re.S).group(1)
+          pathlib.Path('/tmp/app.js').write_text(js)
+          subprocess.run(['node','--check','/tmp/app.js'],check=True)
+          assert 'quiz-text.json' in html and 'q.o.map' in html and 'q.fig?' in html
+          print(f'PASS: {len(data)} text questions, {sum(q["fig"] for q in data)} figure questions, valid JS')
+          PY
