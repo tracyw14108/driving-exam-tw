@@ -1,0 +1,66 @@
+name: Merge all 1090 verified driving-exam questions
+on:
+  push:
+    paths:
+      - '.github/workflows/merge-all-questions.yml'
+      - 'data/supplement35.json'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Merge restored questions and isolate three sign-option images
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          import json, pathlib
+          from PIL import Image
+          basepath=pathlib.Path('data/quiz-text.json')
+          original=json.loads(basepath.read_text(encoding='utf-8'))
+          restored=json.loads(pathlib.Path('data/supplement35.json').read_text(encoding='utf-8'))
+          assert len(restored)==35, f'restored={len(restored)}'
+          assert len(original) in (1055, 1090), f'original={len(original)}'
+          bynum={q['n']:q for q in original}
+          for q in restored:
+            assert q['n'] not in bynum or bynum[q['n']]==q, 'unexpected existing question overlap'
+            bynum[q['n']]=q
+          full=sorted(bynum.values(),key=lambda x:x['n'])
+          assert len(full)==1090
+          assert [q['n'] for q in full]==list(range(1,1091))
+          assert all(1<=q['a']<=3 and q['q'].strip() and len(q['o'])==3 and all(s.strip() for s in q['o']) for q in full)
+          for num in (183,185,233,523,723,1004):
+            img=Image.open(pathlib.Path('images')/f'{num}.png').convert('RGB')
+            # Saturated sign colours locate the original pictograms; black PDF question text is excluded.
+            pixels=img.load()
+            found=[]
+            for yy in range(img.height):
+              for xx in range(img.width):
+                r,g,b=pixels[xx,yy]
+                if max(r,g,b)-min(r,g,b)>50 and min(r,g,b)<210:
+                  found.append((xx,yy))
+            if not found:raise RuntimeError(f'missing colored diagram for {num}')
+            pad=6
+            rect=(max(0,min(x for x,y in found)-pad),max(0,min(y for x,y in found)-pad),min(img.width,max(x for x,y in found)+pad+1),min(img.height,max(y for x,y in found)+pad+1))
+            out=img.crop(rect)
+            path=pathlib.Path('figures')/f'{num}.png'
+            path.parent.mkdir(exist_ok=True)
+            out.save(path,optimize=True)
+            assert out.width>=100 and out.height>=20, (num,out.size)
+          for q in full:
+            if q.get('fig'):
+              assert (pathlib.Path('figures')/f"{q['n']}.png").is_file(), f'missing figure {q["n"]}'
+          basepath.write_text(json.dumps(full,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+          print('PASS all',len(full),'questions;',sum(bool(q.get('fig')) for q in full),'figure questions')
+          PY
+      - name: Commit complete bank and sign graphics
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add data/quiz-text.json figures/
+          if ! git diff --cached --quiet; then
+            git commit -m "Complete the original 1090 questions and signs"
+            git push
+          fi
