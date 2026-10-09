@@ -1,0 +1,72 @@
+name: Build text-first driving exam
+on:
+  push:
+    paths:
+      - '.github/workflows/build-text-bank.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build text choices and crop visual-only figures
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          import re,json,pathlib,io,base64
+          from PIL import Image,ImageChops
+          data=json.loads(pathlib.Path('data/questions.json').read_text('utf-8'))
+          choices=[]
+          visual=pathlib.Path('figures');visual.mkdir(exist_ok=True)
+          count_valid=0
+          for item in data:
+            s=item['txt'].strip()
+            marks=list(re.finditer(r'[（(][１1２2３3][）)]',s))
+            series=[]
+            for m in marks:
+              char=m.group()[1]
+              d=int('１２３'.index(char)+1) if char in '１２３' else int(char)
+              if not series and d==1:series=[m]
+              elif series and d==len(series)+1:series.append(m)
+              if len(series)==3:break
+            if len(series)==3:
+              intro=s[:series[0].start()].strip()
+              options=[s[series[k].end():series[k+1].start() if k<2 else len(s)].strip() for k in range(3)]
+            else:intro='';options=[]
+            # Text-only OCR fragments are not a safe alternative to the source.
+            valid=len(options)==3 and all(len(x)>=2 for x in options) and not any(x.endswith(('，','、','或','且','至','及')) for x in options)
+            # The PDF row image is authoritative for visual presence; derive only a small left-side graphic.
+            figure=False
+            n=item['n']
+            name=pathlib.Path('images')/f'{n}.png'
+            if name.exists():
+              im=Image.open(name).convert('RGB')
+              w,h=im.size
+              # The original table's illustration column is the leftmost 90px.
+              left=im.crop((4,1,min(87,w),max(2,h-2)))
+              # Strongly colored pictograms or non-white complex glyphs in this column indicate a visual question.
+              px=left.resize((max(1,left.width//2),max(1,left.height//2)))
+              rich=sum(1 for r,g,b in px.getdata() if max(r,g,b)-min(r,g,b)>36 and min(r,g,b)<200)
+              figure= rich>30 or ('圖中' in intro) or ('圖示' in intro) or not intro and n not in (91,)
+              if figure:
+                left.save(visual/f'{n}.png',optimize=True)
+            if not intro:
+              intro='下列標誌或圖示代表什麼意思？' if figure else '下列敘述何者正確？'
+            if valid:
+              count_valid+=1
+              choices.append({'n':n,'a':item['a'],'q':intro,'o':options,'fig':figure})
+          pathlib.Path('data/quiz-text.json').write_text(json.dumps(choices,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+          print('validated',count_valid,'of',len(data),'figures',len(list(visual.glob('*.png'))))
+          assert count_valid>=700
+          PY
+      - name: Publish generated text bank
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add data/quiz-text.json figures/
+          if ! git diff --cached --quiet; then
+            git commit -m "Convert source PDF snippets to text-first options with cropped diagrams"
+            git push
+          fi
