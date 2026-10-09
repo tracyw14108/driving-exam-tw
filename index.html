@@ -24,7 +24,7 @@ button:disabled{opacity:.43;cursor:not-allowed}
 <body><main>
 <header class="card">
 <h1>汽車駕照筆試模擬考</h1>
-<div class="chips"><span class="chip">1,090 題</span><span class="chip">隨機 50 題</span><span class="chip">每題 2 分</span><span class="chip">共 100 分</span></div>
+<div class="chips"><span class="chip">文字題庫</span><span class="chip">隨機 50 題</span><span class="chip">每題 2 分</span><span class="chip">共 100 分</span></div>
 <p class="muted">題庫：115.5.29｜每頁 10 題。全部交卷後才公布答案。</p>
 <div class="actions"><button class="primary" id="newExam">開始新的 50 題模擬考</button><button id="wrongExam">錯題重練</button><button id="showHistory">歷次成績</button></div>
 <p id="status" aria-live="polite" class="small muted">網站已準備完成。點選開始測驗即可。</p>
@@ -48,13 +48,13 @@ function setStatus(t,bad=false){$("status").textContent=t;$("status").className=
 async function loadBank(){
  if(bank)return bank;
  setStatus("正在載入題庫索引…");
- const response=await fetch("./data/questions.json?v=20261009-final",{cache:"no-cache"});
+ const response=await fetch("./data/quiz-text.json?v=20261009-text",{cache:"no-cache"});
  if(!response.ok)throw Error("題庫索引無法讀取（HTTP "+response.status+"）");
  const data=await response.json();
- if(!Array.isArray(data)||data.length!==1090||data.some(q=>!Number.isInteger(q.n)||![1,2,3].includes(q.a)))throw Error("題庫資料不完整");
+ if(!Array.isArray(data)||data.length<900||data.some(q=>!Number.isInteger(q.n)||![1,2,3].includes(q.a)))throw Error("題庫資料不完整");
  const ids=new Set(data.map(q=>q.n));
- if(ids.size!==1090)throw Error("題庫題號重複");
- bank=data;return bank;
+ if(ids.size!==data.length)throw Error("題庫題號重複");
+ bank=data;document.querySelector(".chip").textContent=data.length+" 題可測驗";return bank;
 }
 async function newRound(onlyWrong=false){
  try{
@@ -65,7 +65,7 @@ async function newRound(onlyWrong=false){
   if(!pool.length){setStatus("目前尚無錯題，請先完成一回模擬考。");return}
   round=shuffled(pool).slice(0,Math.min(50,pool.length));chosen={};page=0;epoch++;
   $("results").classList.add("hide");$("exam").classList.remove("hide");
-  setStatus("題庫已載入。圖片依題號逐張讀取，請等待每題圖片顯示後作答。");
+  setStatus("文字題庫已載入。只有圖示題會顯示圖片。");
   render();$("exam").scrollIntoView({behavior:"auto"});
  }catch(e){setStatus("無法開始測驗："+e.message,true)}
  finally{$("newExam").disabled=false}
@@ -82,25 +82,10 @@ function render(){
  $("questionList").innerHTML=slice.map((q,j)=>{
   const i=start+j;
   return '<article class="card"><h3>第 '+(i+1)+' 題 <span class="muted small">原題號 '+q.n+'</span></h3>'+
-    '<div class="imgstatus" id="loading-'+i+'">題目圖片載入中…</div>'+
-    '<img class="question-img hide" loading="eager" alt="原題號 '+q.n+' 的完整題目與三個選項" id="image-'+i+'">'+
-    '<div class="choices" id="choices-'+i+'">'+[1,2,3].map(v=>'<button class="option '+(chosen[i]===v?"selected":"")+'" data-i="'+i+'" data-choice="'+v+'" type="button" '+"disabled"+'>（'+v+'）'+(chosen[i]===v?" 已選取":"")+'</button>').join("")+'</div></article>';
+    '<p>'+esc(q.q)+'</p>'+
+    (q.fig?'<img class="question-img" loading="lazy" alt="交通圖示，原題號 '+q.n+'" src="./figures/'+q.n+'.png">':'')+
+    '<div class="choices" id="choices-'+i+'">'+q.o.map((opt,k)=>'<button class="option '+(chosen[i]===k+1?"selected":"")+'" data-i="'+i+'" data-choice="'+(k+1)+'" type="button">（'+(k+1)+'）'+esc(opt)+'</button>').join("")+'</div></article>';
  }).join("");
- const token=epoch;
- slice.forEach((q,j)=>{const i=start+j,im=$("image-"+i),load=$("loading-"+i);
-  im.onload=()=>{
-   if(epoch!==token||!document.contains(im))return;
-   im.classList.remove("hide");load.classList.add("hide");
-   
-   $("choices-"+i).querySelectorAll("button").forEach(b=>b.disabled=false);
-  };
-  im.onerror=()=>{
-   if(epoch!==token||!document.contains(im))return;
-   load.textContent="圖片載入失敗，請按下方「重試這題圖片」。";
-   let btn=document.createElement("button");btn.textContent="重試這題圖片";btn.onclick=()=>{load.textContent="重新載入中…";load.append(btn);im.src="./images/"+q.n+".png?retry="+Date.now()};load.append(btn);
-  };
-  im.src="./images/"+q.n+".png";
- });
 }
 $("questionList").addEventListener("click",e=>{
  const b=e.target.closest("button[data-choice]");if(!b||b.disabled)return;
@@ -108,7 +93,7 @@ $("questionList").addEventListener("click",e=>{
  const region=$("choices-"+i);region.querySelectorAll("button").forEach(opt=>{
   const selected=Number(opt.dataset.choice)===v;
   opt.classList.toggle("selected",selected);
-  opt.textContent="（"+opt.dataset.choice+"）"+(selected?" 已選取":"");
+  opt.textContent="（"+opt.dataset.choice+"）"+round[i].o[Number(opt.dataset.choice)-1];
  });
  const count=round.filter((_,i)=>chosen[i]).length;
  $("progressText").textContent="已答 "+count+"／"+round.length+" 題";
