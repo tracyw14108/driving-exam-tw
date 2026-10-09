@@ -1,0 +1,40 @@
+name: Prepare driving exam bank
+on:
+  push:
+    paths:
+      - '.github/workflows/prepare-bank.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Split source into lightweight question metadata and image chunks
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, re
+          html=pathlib.Path('exam-lite.html').read_text(encoding='utf-8')
+          start=html.index('const BANK=')+len('const BANK=')
+          end=html.index(';\nconst TOPICS=',start)
+          items=json.loads(html[start:end])
+          assert len(items)==1090, f'Unexpected question count {len(items)}'
+          p=pathlib.Path('data');p.mkdir(exist_ok=True)
+          small=[{'n':q['n'],'a':q['a'],'txt':q.get('txt','')} for q in items]
+          (p/'questions.json').write_text(json.dumps(small,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+          images=p/'images';images.mkdir(exist_ok=True)
+          for i in range(0,len(items),20):
+            chunk={str(q['n']):q.get('img','') for q in items[i:i+20]}
+            (images/f'{i//20:03d}.json').write_text(json.dumps(chunk,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+          print('Extracted',len(items),'questions in',len(list(images.glob('*.json'))),'chunks')
+          PY
+      - name: Commit generated data
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add data
+          if ! git diff --cached --quiet; then
+            git commit -m "Split driving exam data for fast mobile loading"
+            git push
+          fi
