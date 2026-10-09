@@ -57,19 +57,35 @@ const subjects=[
 ];
 function category(q){const t=[q.q,...q.o].join("");for(const [label,re] of subjects)if(re.test(t))return label;return "其他駕駛規則"}
 function mnemonic(q,wrongChoice){
- const correct=q.o[q.a-1]||"",incorrect=q.o[(wrongChoice||1)-1]||"",text=q.q+" "+correct;
- let scene="";
- if(/酒|酒測|酒精/.test(text))scene="想像酒瓶一碰方向盤就亮起紅燈；把題目中的罰鍰、年限和駕照處分分別貼在紅燈旁，不要混記。";
- else if(/停車|臨時停車|紅線|黃線/.test(text))scene="想像路邊兩個守門員：紅線舉起紅牌「連臨停都不行」，黃線提醒「停車受限」；再核對題目的時段。";
- else if(/消防|救護|警備|救險/.test(text))scene="把消防車想成一路發亮的緊急通道：先讓路、不要尾隨搶快。";
- else if(/行人|穿越道|斑馬|枕木紋/.test(text))scene="想像斑馬站在斑馬線上當裁判：先保護行人，再決定車子怎麼走。";
- else if(/車道|超車|方向燈|匝道/.test(text))scene="想像變換車道前要做「照鏡子—打燈—看死角」三連拍，先讓直行車再移動。";
- else if(/標誌|圖示|燈號|標線/.test(text))scene="把圖示畫成一張角色卡：先抓外形、顏色與箭頭，再用一句話替它命名，和另外兩張對照。";
- else if(/煞車|下坡|輪胎|水溫|電瓶|引擎/.test(text))scene="把儀表板想成車子的健康手環：亮警示先保安全，不要硬撐繼續開。";
- else if(/疲勞|睡意|手機|輔助系統/.test(text))scene="想像方向盤是雙手才能握住的門票：眼睛離開路面，門票就失效。";
- else scene="把這題演成三幕小劇場：先說情境，再說該怎麼做，最後想像錯誤選項會造成什麼後果。";
- let contrast=incorrect&&incorrect!==correct?"你容易混淆的是「"+incorrect.slice(0,55)+"」；請把它和正解的關鍵動作或數字分開記。":"";
- return {cue:"這題要記住：「"+correct+"」",story:scene,contrast};
+ const answer=q.o[q.a-1]||"",question=q.q||"";
+ const wrong=Number.isInteger(wrongChoice)&&wrongChoice>=1&&wrongChoice<=3&&wrongChoice!==q.a?q.o[wrongChoice-1]:"";
+ const key=(answer.match(/(?:\d[\d,.]*\s*(?:年|月|日|小時|分鐘|公尺|公里|元|點|%|％|毫克|公釐))/g)||[]);
+ const numbers=[...new Set(key)].slice(0,3);
+ const sceneBase=question+" "+answer;
+ const trim=t=>String(t).replace(/[。；，、]+$/,"").trim();
+ const core=trim(answer).slice(0,90);
+ const tags=[
+ [/酒測|酒精|酒駕|喝酒|飲酒|酒後/,"酒瓶變成超大的紅色停車鍵","把「"+core+"」寫在酒瓶封條上；遇到這題就想像封條上的那句正解。"],
+ [/黃線|紅線|禁止停車|臨時停車/,"紅黃兩位停車守門員","讓守門員舉起寫著「"+core+"」的牌子；每次看見線色，就讀一次牌子上的規則。"],
+ [/行人|穿越道|斑馬|枕木紋/,"斑馬戴著交通警察帽站在斑馬線中央","斑馬舉起「"+core+"」的指示板，車子要照板上的動作走。"],
+ [/消防車|救護車|警備車|救險車/,"會發亮的救護車優先通道","警報一響，路上展開一條寫著「"+core+"」的光路，記住正解要求的動作。"],
+ [/迴車|倒車|停車再開/,"一台小汽車遇到三岔路的選擇門","門口的警衛只放行符合「"+core+"」的車，其他做法都被擋下。"],
+ [/變換車道|超車|方向燈|匝道|車道/,"方向燈變成巨大的舞台聚光燈","車子只有照「"+core+"」演出才會亮綠燈；把正解的先後順序當成一套舞步。"],
+ [/下坡|煞車|輪胎|引擎|電瓶|水溫|儀表/,"儀表板變成車子的醫生","醫生開出的處方箋寫著「"+core+"」；機件出狀況就回想這張處方。"],
+ [/高速|快速公路|國道|安全距離|速限/,"高速公路上有一座巨大的數字看板","看板寫著「"+core+"」；通過交流道前一定要念對這塊看板的內容。"],
+ [/輔助系統|ADAS|ACC|LKA|手機|疲勞|睡意/,"方向盤化成會提醒駕駛的機器人","機器人胸前的大字就是「"+core+"」；記住這句話，別被看似方便的錯誤選項帶走。"],
+ [/標誌|標線|圖示|燈號|號誌/,"交通標誌變成會說話的角色","讓它自我介紹：「我是"+core+"！」；把圖形與這句正解配成同一張記憶卡。"],
+ [/罰鍰|吊扣|吊銷|處罰|違規|講習/,"交通法庭裡一名法官拿著大印章","印章蓋出的不是其他數字，而是「"+core+"」；記住正解的金額、期限與處分名稱。"]
+ ];
+ let selected=tags.find(([re])=>re.test(sceneBase));
+ let scene=selected?selected[1]:"這題的關鍵字長出一張超大的提示卡";
+ let story=selected?selected[2]:"想像題目場景中有塊寫著「"+core+"」的巨大路牌；重演這個畫面並照牌上的正解行動。";
+ if(numbers.length){
+   const nums=numbers.join("、");
+   story+=" 特別把「"+nums+"」畫成大大的霓虹數字，和「"+trim(question).slice(0,28)+"」綁在同一張圖上；數字不能跟其他題互換。";
+ }
+ const contrast=wrong?"對照你上次選的「"+trim(wrong).slice(0,85)+"」：把它貼在叉叉牌上，正確選項「"+core+"」貼在打勾牌上；回憶兩張牌的不同。":"";
+ return {cue:"正確選項（"+q.a+"）：「"+answer+"」",story:"畫面聯想｜"+scene+"。"+story,contrast};
 }
 function records(){const x=read(KEY,{});return x&&typeof x==="object"&&!Array.isArray(x)?x:{}}
 function legacyWrong(){return read(OLD_WRONG,[]).map(Number).filter(Number.isFinite)}
