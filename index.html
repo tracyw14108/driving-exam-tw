@@ -5,18 +5,46 @@ let bank=null,exam=[],ans={},idx=0,finished=false;
 const el=id=>document.getElementById(id);
 function shuffle(a){let v=a.slice();for(let i=v.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[v[i],v[j]]=[v[j],v[i]]}return v}
 function read(k){try{return JSON.parse(localStorage.getItem(k)||'[]')}catch{return []}}
+const imageChunks=new Map();
 async function loadBank(){
  if(bank)return bank;
- el('message').textContent='正在讀取完整題庫（第一次約需數秒，請稍候）…';
- const response=await fetch('./exam-lite.html?v=20261009',{cache:'force-cache'});
- if(!response.ok)throw Error('題庫下載失敗（HTTP '+response.status+'）');
- const html=await response.text();
- const begin=html.indexOf('const BANK='),ending=html.indexOf('];\nconst TOPICS=',begin);
- if(begin<0||ending<0)throw Error('題庫格式不符，請告訴我錯誤訊息');
- const data=JSON.parse(html.slice(begin+11,ending+1));
- if(data.length!==1090)throw Error('題目數量不符：'+data.length);
- bank=data;el('message').textContent='題庫 1,090 題載入成功。';
+ el('message').textContent='正在讀取題庫索引…';
+ const r=await fetch('./data/questions.json?v=2',{cache:'no-cache'});
+ if(!r.ok)throw Error('題庫索引下載失敗（HTTP '+r.status+'）');
+ const data=await r.json();
+ if(!Array.isArray(data)||data.length!==1090)throw Error('題目數量錯誤：'+data?.length);
+ bank=data;
+ el('message').textContent='1,090 題索引已載入，圖片會在切換到各題時載入。';
  return bank;
+}
+async function loadImageChunk(num){
+ const id=Math.floor((num-1)/20);
+ if(!imageChunks.has(id)){
+   const file=String(id).padStart(3,'0');
+   imageChunks.set(id,fetch('./data/images/'+file+'.json').then(r=>{
+     if(!r.ok)throw Error('圖片下載 HTTP '+r.status);return r.json();
+   }).catch(e=>{imageChunks.delete(id);throw e}));
+ }
+ return imageChunks.get(id);
+}
+async function fillImages(part,pageIndex){
+ await Promise.all(part.map(async(q,k)=>{
+   const targetId='pic-'+pageIndex+'-'+k;
+   try{
+     const chunk=await loadImageChunk(q.n);
+     const dest=document.getElementById(targetId);
+     if(dest){
+        const imageData=chunk[String(q.n)];
+        if(imageData){
+          const img=document.createElement('img');
+          img.alt='第 '+(pageIndex*10+k+1)+' 題題目圖片';
+          img.loading='lazy';
+          img.src='data:image/png;base64,'+imageData;
+          dest.replaceChildren(img);
+        }else dest.textContent='此題缺少圖片資料';
+     }
+   }catch(e){const dest=document.getElementById(targetId);if(dest)dest.textContent='圖片載入失敗，請重新整理：'+e.message}
+ }));
 }
 async function begin(wrong){
  try{el('start').disabled=true;const all=await loadBank();let ids=read('driving-wrong-ids');let pool=wrong?all.filter(q=>ids.includes(q.n)):all;if(!pool.length){el('message').textContent='目前尚無錯題，請先完成一次模擬考。';return}
@@ -25,15 +53,17 @@ async function begin(wrong){
 }
 function note(q){let t=q.txt||'';if(/酒駕|酒精|酒測|酒後/.test(t))return '注意酒駕的金額、年限與吊扣、吊銷差別。';if(/停車|臨時停車|黃線|紅線/.test(t))return '分辨禁止停車與禁止臨時停車的路段及時段。';if(/方向燈|變換車道/.test(t))return '換道前打燈、確認死角並注意直行車。';return '重看題目中的數字、限制條件與禁止事項。'}
 function draw(){
- let part=exam.slice(idx*10,idx*10+10);
+ const page=idx,part=exam.slice(idx*10,idx*10+10);
  el('progress').textContent='已答 '+Object.keys(ans).length+'／'+exam.length+' 題';
  el('pageno').textContent='第 '+(idx+1)+'／'+Math.ceil(exam.length/10)+' 頁';
- el('qs').innerHTML=part.map((q,k)=>{let i=idx*10+k,opts=q.opts||q.options||[];return '<article class="card q"><div class="muted">第 '+(i+1)+' 題｜原題號 '+q.n+'</div>'+ (q.img?'<img loading="lazy" alt="第 '+(i+1)+' 題圖示" src="data:image/png;base64,'+q.img+'">':'')+''+'<div class="choices">'+[1,2,3].map(v=>'<button class="'+(ans[i]===v?'sel':'')+'" onclick="choose('+i+','+v+')">（'+v+'）'+(opts[v-1]?escapeHTML(opts[v-1]):'')+'</button>').join('')+'</div></article>'}).join('');
+ el('qs').innerHTML=part.map((q,k)=>{let i=idx*10+k;
+ return '<article class="card q"><div class="muted">第 '+(i+1)+' 題｜原題號 '+q.n+'</div><div id="pic-'+page+'-'+k+'">圖片載入中…</div><div class="choices">'+[1,2,3].map(v=>'<button class="'+(ans[i]===v?'sel':'')+'" onclick="choose('+i+','+v+')">（'+v+'）</button>').join('')+'</div></article>'}).join('');
+ fillImages(part,page);
 }
 function escapeHTML(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function choose(i,v){ans[i]=v;draw()}
+function choose(i,v){ans[i]=v;document.querySelectorAll('.choices button').forEach(b=>{const section=b.closest('.q');if(section && section.querySelector('.muted')?.textContent?.startsWith('第 '+(i+1)+' 題'))b.classList.toggle('sel',b.textContent.includes('（'+v+'）'))});el('progress').textContent='已答 '+Object.keys(ans).length+'／'+exam.length+' 題'}
 function step(d){idx=Math.max(0,Math.min(Math.ceil(exam.length/10)-1,idx+d));draw();el('test').scrollIntoView()}
-function finish(){
+async function finish(){
  const missing=exam.length-Object.keys(ans).length;if(missing&&!confirm('還有 '+missing+' 題未作答，確定交卷？'))return;
  let wrong=exam.map((q,i)=>({q,i})).filter(({q,i})=>ans[i]!==q.a);
  const ids=new Set(read('driving-wrong-ids'));wrong.forEach(({q})=>ids.add(q.n));localStorage.setItem('driving-wrong-ids',JSON.stringify([...ids]));
