@@ -1,0 +1,42 @@
+name: Export question images for Safari
+on:
+  push:
+    paths:
+      - '.github/workflows/export-images.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  export-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make individually served PNG files
+        run: |
+          python3 - <<'PY'
+          import pathlib,json,base64
+          root=pathlib.Path('data/images')
+          out=pathlib.Path('images')
+          out.mkdir(exist_ok=True)
+          total=0
+          for file in sorted(root.glob('*.json')):
+            chunk=json.loads(file.read_text(encoding='utf-8'))
+            for key,value in chunk.items():
+              if value:
+                raw=base64.b64decode(value)
+                if not raw.startswith(b'\x89PNG\r\n\x1a\n'):
+                  raise ValueError('Not PNG: '+key)
+                (out/f'{key}.png').write_bytes(raw)
+                total+=1
+          print('Exported',total,'images')
+          assert total>=1000
+          PY
+      - name: Commit all images
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add images/
+          if ! git diff --cached --quiet; then
+            git commit -m "Export per-question PNG assets for mobile loading"
+            git push
+          fi
