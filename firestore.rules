@@ -17,7 +17,8 @@ service cloud.firestore {
         allow update, delete: if false;
       }
       match /legacyImports/{importId} {
-        allow read, create: if request.auth != null && request.auth.uid == uid
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow create: if request.auth != null && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['id','records','history','attemptedIds','oldWrongIds','importedAt'])
           && request.resource.data.id == importId;
         allow update, delete: if false;
