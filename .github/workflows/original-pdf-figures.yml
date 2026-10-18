@@ -1,4 +1,4 @@
-name: Improve existing traffic-sign pictures only
+name: Restore seven three-image exam questions only
 on:
   push:
     paths:
@@ -10,51 +10,84 @@ concurrency:
   group: driving-exam-image-enhancement
   cancel-in-progress: false
 jobs:
-  refresh:
+  restore-seven:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
-      - name: Install image tools
-        run: python -m pip install --quiet pillow
-      - name: Enhance 189 original question diagrams without altering question data
+      - name: Install extraction libraries
+        run: python -m pip install --quiet pymupdf pillow
+      - name: Restore exact three-icon source images
+        env:
+          PDF_URL: "https://ws.thb.gov.tw/Download.ashx?icon=..pdf&n=5rG96LuK562G6Kmm6aGM5bqrX%2BWFrOWRijExNS4wNS4yOS5wZGY%3D&u=LzAwMS9VcGxvYWQvNDM2L3JlbGZpbGUvMTI4MjMvMjk3NzM5L2RmNjY0NmM3LTZjZTQtNGMzMy1iZTU4LWJhYWYzNTdkYmQ0MC5wZGY%3D"
         run: |
           python - <<'PY'
-          import pathlib,json,hashlib
-          from PIL import Image,ImageEnhance,ImageFilter
-          bank=json.loads(pathlib.Path('data/quiz-text.json').read_text(encoding='utf-8'))
-          flagged=[q['n'] for q in bank if q.get('fig')]
-          assert len(bank)==1090 and len(flagged)==189 and len(set(flagged))==189
-          originals={p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in ('index.html','data/quiz-text.json','firebase-config.js','cloud-sync.js')}
-          directory=pathlib.Path('figures-hq')
-          for n in flagged:
-            path=directory/f'{n}.png'
-            assert path.is_file() and path.stat().st_size>100, f'Missing image for question {n}'
-            with Image.open(path) as old:
-              old.load()
-              assert old.width>=20 and old.height>=20, f'Diagram too small for {n}'
-              # Optimize the already-extracted figure without shifting its bounds or content.
-              src=old.convert('RGB')
-              if max(src.size)<1600:
-                resized=src.resize((src.width*2,src.height*2),Image.Resampling.LANCZOS)
-              else:
-                resized=src
-              tuned=ImageEnhance.Contrast(resized).enhance(1.10)
-              tuned=tuned.filter(ImageFilter.UnsharpMask(radius=1.35,percent=175,threshold=3))
-              tuned.save(path,format='PNG',optimize=True)
-              with Image.open(path) as check:
-                check.verify()
-          for p,sha in originals.items():
-            assert hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()==sha, f'Protected file changed: {p}'
-          print('PASS: 189 enhanced images verified; 1090 question records and application files unchanged.')
+          import os, io, re, time, urllib.request, pathlib, hashlib
+          import fitz
+          from PIL import Image, ImageOps, ImageEnhance, ImageFilter, ImageDraw
+          target=(183,184,185,233,523,723,1004)
+          protected=('index.html','data/quiz-text.json','firebase-config.js','cloud-sync.js','firestore.rules')
+          before={p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in protected}
+          raw=None
+          for attempt in range(4):
+              try:
+                  req=urllib.request.Request(os.environ['PDF_URL'],headers={'User-Agent':'Mozilla/5.0','Referer':'https://ws.thb.gov.tw/'})
+                  with urllib.request.urlopen(req,timeout=90) as res: raw=res.read()
+                  assert raw.startswith(b'%PDF-'), 'Source is not PDF'
+                  break
+              except Exception:
+                  if attempt==3: raise
+                  time.sleep(4*(attempt+1))
+          doc=fitz.open(stream=raw,filetype='pdf')
+          assert len(doc)==80, f'Unexpected PDF pages: {len(doc)}'
+          entries={n:[] for n in target}
+          for pg in doc:
+              nums=[(int(w[4]),(w[1]+w[3])/2) for w in pg.get_text('words') if w[0]<115 and re.fullmatch(r'\d{1,4}',w[4]) and int(w[4]) in target]
+              for ref in pg.get_images(full=True):
+                  xref=ref[0]
+                  for box in pg.get_image_rects(xref):
+                      closest=sorted((abs((box.y0+box.y1)/2-y),n) for n,y in nums)
+                      if closest and closest[0][0]<25:
+                          n=closest[0][1]
+                          im=Image.open(io.BytesIO(doc.extract_image(xref)['image'])).convert('RGBA')
+                          if not any(t[0]==xref for t in entries[n]): entries[n].append((xref,box.x0,im))
+          for n in target:
+              parts=sorted(entries[n],key=lambda t:t[1])
+              assert len(parts)==3, f'Question {n}: expected 3 icons, got {len(parts)}'
+              cropped=[]
+              for _,_,im in parts:
+                  flat=Image.new('RGB',im.size,'white');flat.paste(im,mask=im.getchannel('A'))
+                  bb=ImageOps.invert(flat.convert('L')).getbbox() or (0,0,im.width,im.height)
+                  bb=(max(0,bb[0]-6),max(0,bb[1]-6),min(im.width,bb[2]+6),min(im.height,bb[3]+6))
+                  cropped.append(ImageEnhance.Contrast(flat.crop(bb)).enhance(1.08))
+              w=max(x.width for x in cropped);h=max(x.height for x in cropped)
+              pad=18;head=38;gap=12
+              cell_w=w+pad*2;cell_h=h+pad*2+head
+              canvas=Image.new('RGB',(cell_w*3+gap*2,cell_h),'white')
+              draw=ImageDraw.Draw(canvas)
+              for i,im in enumerate(cropped):
+                  x=i*(cell_w+gap)
+                  canvas.paste(im,(x+pad+(w-im.width)//2,head+pad+(h-im.height)//2))
+                  draw.text((x+14,10),f'({i+1})',fill='black')
+                  draw.rectangle([x+3,3,x+cell_w-3,cell_h-3],outline=(170,170,170))
+              for folder,maxdim in (('figures-hq',1600),('figures',900)):
+                  pathlib.Path(folder).mkdir(exist_ok=True)
+                  scale=min(maxdim/canvas.width,maxdim/canvas.height)
+                  img=canvas.resize((round(canvas.width*scale),round(canvas.height*scale)),Image.Resampling.LANCZOS)
+                  p=pathlib.Path(folder)/f'{n}.png'
+                  img.save(p,format='PNG',optimize=True)
+                  with Image.open(p) as check:check.verify()
+          for p,sha in before.items():
+              assert hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()==sha, f'Protected file changed: {p}'
+          print('PASS: only 14 PNG files regenerated for seven three-image questions')
           PY
-      - name: Commit figure files only
+      - name: Commit only 14 specified PNG files
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -- figures-hq/
+          git add -- figures-hq/{183,184,185,233,523,723,1004}.png figures/{183,184,185,233,523,723,1004}.png
           if ! git diff --cached --quiet; then
-            git commit -m "Improve 189 traffic-sign figure clarity only"
+            git commit -m "Restore full three-image diagrams for seven questions only"
             git push
           fi
