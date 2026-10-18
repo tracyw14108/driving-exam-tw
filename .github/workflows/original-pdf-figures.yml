@@ -1,4 +1,4 @@
-name: Restore seven three-image exam questions only
+name: Restore seven three-image exam questions only (2026-10-18)
 on:
   push:
     paths:
